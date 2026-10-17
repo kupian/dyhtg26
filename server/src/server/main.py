@@ -70,28 +70,11 @@ def keystroke(body: KeystrokeRequest) -> KeystrokeResponse:
         raise RoomError("Room is not playing")
 
     player = room.get_player(body.player_id)
-
-    """
-    if player.next_correct_keystroke == body.symbol:
-        player.advance_next_keystroke()
-        correct = True
-    else:
-        correct = False
-    """
-    #! TEMPORARY FOR TESTING ----
-    correct=True
     player.type_character(body.symbol)
 
-    #! ------
-    #target_character = player.get_target_character()
-    typed_sentence = player.get_typed_sentence()
-
-
     return KeystrokeResponse(
-        correct=correct,
-        current_sentence_ascii=typed_sentence,
-        current_sentence_morse=typed_sentence,
-        #current_target_character=target_character.as_ascii()
+        current_sentence_ascii=player.get_typed_ascii(),
+        current_sentence_morse=player.get_typed_morse(),
     )
 
 @app.websocket("/game/{room_code}/{player_id}")

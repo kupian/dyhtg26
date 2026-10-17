@@ -34,9 +34,7 @@ class KeystrokeRequest(BaseModel):
     symbol: str
 
 class KeystrokeResponse(BaseModel):
-    correct: bool
     current_sentence_ascii: str
     current_sentence_morse: str
-    #current_target_character: str
 class ErrorResponse(BaseModel):
     error: str
