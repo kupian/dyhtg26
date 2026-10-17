@@ -1,14 +1,13 @@
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from server.game import GameManager, Room
-from server.models import CreateRoomResponse, ErrorResponse, JoinRoomResponse
+from server.models import CreateRoomResponse, ErrorResponse, JoinRoomRequest, JoinRoomResponse, ReadyRequest, ReadyResponse, SentenceRequest, SentenceResponse
 from server.exceptions import GameError, RoomError, PlayerError
 from server.sockets import ConnectionManager
 from uuid import UUID
 
 app = FastAPI()
 gm = GameManager()
-cm = ConnectionManager()
 
 @app.exception_handler(GameError)
 async def game_error_handler(request: Request, exc: GameError):
@@ -35,10 +34,29 @@ def create_room() -> CreateRoomResponse:
     summary="Join an existing room as Player 2",
     responses={409: {"model": ErrorResponse, "description": "Error joining room"}}
 )
-def join_room(room_code: str) -> JoinRoomResponse:
+def join_room(body: JoinRoomRequest) -> JoinRoomResponse:
     """Joins a room and returns the player's generated ID"""
-    return JoinRoomResponse(player_id=gm.join_room(room_code))
+    return JoinRoomResponse(room_code=body.room_code,
+                            player_id=gm.join_room(body.room_code))
 
+@app.post(
+    "/ready",
+    summary="Set a player as ready to start the game",
+    responses={409: {"model": ErrorResponse, "description": "Error readying up player"}}
+)
+def ready(body: ReadyRequest) -> ReadyResponse:
+    player = gm.get_room(body.room_code).get_player(body.player_id)
+    player.set_ready()
+    return ReadyResponse(message=f"Room {body.room_code}: {body.player_id} set to ready")
+
+@app.post(
+    "/sentence",
+    summary="Get the current sentence for an active room",
+    responses={409: {"model": ErrorResponse, "description": "Error getting sentence"}}
+)
+def sentence(body: SentenceRequest) -> SentenceResponse:
+    sentence = gm.get_room(body.room_code).get_sentence()
+    return SentenceResponse(sentence=sentence.as_ascii())
 
 @app.websocket("/game/{room_code}/{player_id}")
 async def websocket_endpoint(websocket: WebSocket, room_code: str, player_id: str):
@@ -53,10 +71,10 @@ async def websocket_endpoint(websocket: WebSocket, room_code: str, player_id: st
         await websocket.close(code=1008, reason=reason)
         return
 
-    await cm.connect(websocket, room, player)
+    await room.connections.connect(websocket, player_uuid)
     try:
         while True:
             data = await websocket.receive_text()
             # TODO: handle message
     except WebSocketDisconnect:
-        cm.disconnect(player)
+        room.connections.disconnect(player_uuid)

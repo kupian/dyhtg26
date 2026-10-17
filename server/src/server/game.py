@@ -2,6 +2,8 @@ from math import log2, ceil
 from uuid import UUID, uuid4
 from server.exceptions import RoomError, GameError, PlayerError
 import server.morse as morse
+from server.sockets import ConnectionManager
+from server.models import RoomState
 
 """
 MAGIC NUMBERS
@@ -72,12 +74,27 @@ class Player:
         else:
             raise PlayerError("Player is already ready")
 
+
 class Room:
     max_players = 2
 
     def __init__(self, code):
-        self.code = code
-        self.players = {}
+        self.code : str = code
+        self.players : dict[UUID, Player] = {}
+        self.connections = ConnectionManager()
+        self.room_state = RoomState.WAITING
+        self.current_sentence : Sentence | None = None
+
+    def generate_new_sentence(self):
+        # TODO: implement this
+        self.current_sentence = Sentence("The quick brown fox jumped over the lazy dog")
+
+    def get_sentence(self) -> Sentence:
+        if not self.room_state == RoomState.PLAYING:
+            raise GameError("Room is not active")
+        if not self.current_sentence:
+            raise RoomError("This room has no sentence")
+        return self.current_sentence
 
     def add_player(self) -> UUID:
         if len(self.players) < self.max_players:
@@ -93,11 +110,21 @@ class Room:
             raise RoomError("Player does not exist")
         return player
 
-    def set_player_ready(self, player_id):
+    def set_player_ready(self, player_id: UUID):
         self.get_player(player_id).set_ready()
+        if all([player.ready for player in self.players.values()]):
+            self.start_room()
 
     def get_player_count(self):
         return len(self.players)
+
+    def start_room(self):
+        if self.room_state == RoomState.WAITING:
+            self.room_state = RoomState.PLAYING
+            self.generate_new_sentence()
+            _ = self.connections.notify_state_change_all(self.room_state)
+        else:
+            raise RoomError("Room cannot be started now")
 
 class GameManager():
     def __init__(self):
