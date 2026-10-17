@@ -53,10 +53,10 @@ def encode_sentence(ascii_sentence: str) -> str:
 
 def decode_sentence(morse_sentence: str) -> str:
     final_sentence = ""
-    for w in morse_sentence.split(" "):
+    for character in morse_sentence.split("NEWCHAR"):
         try:
-            final_sentence += decode[w]
+            final_sentence += decode[character]
         except KeyError as e:
-            raise EncodingError(f"Could not decode {w} as ascii")
+            final_sentence += "?"
 
     return final_sentence
