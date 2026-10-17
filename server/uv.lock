@@ -1116,10 +1116,14 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi", extra = ["standard"] },
+    { name = "websockets" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "fastapi", extras = ["standard"], specifier = ">=0.143.3" }]
+requires-dist = [
+    { name = "fastapi", extras = ["standard"], specifier = ">=0.143.3" },
+    { name = "websockets", specifier = ">=17.2" },
+]
 
 [[package]]
 name = "shellingham"

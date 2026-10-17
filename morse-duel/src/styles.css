@@ -1,9 +1,9 @@
 :root {
-  --bg: #111827;
+  --bg: #323437;
   --surface: #1f2937;
   --surface-hover: #374151;
   --border: #374151;
-  --text: #f9fafb;
+  --text: #d1d0c5;
   --muted: #9ca3af;
   --accent: #2563eb;
   --tap: 44px; /* minimum touch target (Apple HIG) */
