@@ -48,6 +48,8 @@ export interface RoomProps {
   roomState: RoomState;
   socketStatus: SocketStatus;
   sentence: string | null;
+  /** current_sentence_morse from the last /keystroke response */
+  typedMorse: string;
   events: LogEntry[];
   isReady: boolean;
   isReadying: boolean;

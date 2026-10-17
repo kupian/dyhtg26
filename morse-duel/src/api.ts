@@ -9,6 +9,12 @@ export type CreateRoomResponse = { room_code: string; player_id: string };
 export type JoinRoomResponse = { room_code: string; player_id: string };
 export type ReadyResponse = { message: string };
 export type SentenceResponse = { sentence: string };
+export type KeystrokeResponse = {
+  correct: boolean;
+  current_sentence_ascii: string;
+  current_sentence_morse: string;
+  current_target_character: string;
+};
 
 /** POST JSON and parse JSON, with a timeout and a real error on non-2xx. */
 async function postJSON<T>(path: string, body?: unknown): Promise<T> {
@@ -70,12 +76,9 @@ export const readyUp = (roomCode: RoomCode, playerId: string) =>
 export const getSentence = (roomCode: RoomCode) =>
   postJSON<SentenceResponse>("/sentence", { room_code: roomCode });
 
-/**
- * Not implemented on the server yet. The body shape is a proposal — adjust it
- * to match the endpoint. The response is shown raw until its shape is settled.
- */
+/** Send one dot/dash. The server owns the typed sentence and returns its current state. */
 export const sendKeystroke = (roomCode: RoomCode, playerId: string, symbol: KeySymbol) =>
-  postJSON<unknown>("/keystroke", { room_code: roomCode, player_id: playerId, symbol });
+  postJSON<KeystrokeResponse>("/keystroke", { room_code: roomCode, player_id: playerId, symbol });
 
 /** Open the per-player game socket. The server broadcasts room state changes on it. */
 export function openRoomSocket(roomCode: RoomCode, playerId: string): WebSocket {

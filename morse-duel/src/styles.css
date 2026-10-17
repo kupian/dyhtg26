@@ -1053,3 +1053,7 @@ button:disabled {
   font-size: 0.8rem;
   color: #7dd3fc;
 }
+.typed-morse {
+  font-size: 1.25rem;
+  overflow-wrap: anywhere;
+}

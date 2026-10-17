@@ -8,6 +8,7 @@ export default function Room({
   roomState,
   socketStatus,
   sentence,
+  typedMorse,
   events,
   isReady,
   isReadying,
@@ -89,6 +90,13 @@ export default function Room({
               <span className="decoded-stream">LOADING SENTENCE…</span>
             </div>
           )}
+
+          <div className="duel-track-header">
+            <span>YOUR SIGNAL</span>
+          </div>
+          <div className="transmission-display">
+            <span className="morse-stream typed-morse">{typedMorse || "_"}</span>
+          </div>
 
           <p className="hint" style={{ textAlign: "center" }}>
             Tap DOT / DASH or press . / -

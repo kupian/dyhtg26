@@ -33,6 +33,8 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [isReady, setIsReady] = useState(false);
   const [isReadying, setIsReadying] = useState(false);
+  // Latest current_sentence_morse from /keystroke — the server owns typed state.
+  const [typedMorse, setTypedMorse] = useState("");
 
   // --- Audio / design state (from ai-front-end-test) ------------------------
   const [isMuted, setIsMuted] = useState(false);
@@ -75,6 +77,9 @@ export default function App() {
   const timeoutsRef = useRef<number[]>([]);
   const socketRef = useRef<WebSocket | null>(null);
   const nextLogId = useRef(0);
+  // Keystroke requests can resolve out of order; only show the newest response.
+  const keystrokeSeqRef = useRef(0);
+  const appliedKeystrokeSeqRef = useRef(0);
 
   const log = useCallback((text: string) => {
     const entry = { id: nextLogId.current++, time: new Date().toLocaleTimeString(), text };
@@ -251,6 +256,8 @@ export default function App() {
       setRoomState("WAITING");
       setSocketStatus("closed");
       setSentence(null);
+      setTypedMorse("");
+      appliedKeystrokeSeqRef.current = keystrokeSeqRef.current;
       setError(null);
       setIsReady(false);
       setIsReadying(false);
@@ -310,6 +317,8 @@ export default function App() {
     setSocketStatus("closed");
     setRoomState("WAITING");
     setSentence(null);
+    setTypedMorse("");
+    appliedKeystrokeSeqRef.current = keystrokeSeqRef.current;
     setEvents([]);
     setError(null);
     setIsReady(false);
@@ -347,9 +356,14 @@ export default function App() {
       else sound.playDash(isMuted);
 
       log(`→ POST /keystroke ${symbol}`);
+      const seq = ++keystrokeSeqRef.current;
       try {
         const data = await api.sendKeystroke(session.roomCode, session.playerId, symbol);
         log(`← keystroke: ${JSON.stringify(data)}`);
+        if (seq > appliedKeystrokeSeqRef.current) {
+          appliedKeystrokeSeqRef.current = seq;
+          setTypedMorse(data.current_sentence_morse);
+        }
       } catch (err) {
         log(`✗ /keystroke: ${api.describeError(err)}`);
       }
@@ -712,6 +726,7 @@ export default function App() {
           roomState={roomState}
           socketStatus={socketStatus}
           sentence={sentence}
+          typedMorse={typedMorse}
           events={events}
           isReady={isReady}
           isReadying={isReadying}
