@@ -6,3 +6,9 @@ class RoomError(GameError):
 
 class PlayerError(GameError):
     pass
+
+class EncodingError(GameError):
+    pass
+
+class ConnectionError(GameError):
+    pass
