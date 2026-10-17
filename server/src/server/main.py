@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from server.game import GameManager, Room
-from server.models import CreateRoomResponse, ErrorResponse, JoinRoomResponse, ReadyResponse
+from server.models import CreateRoomResponse, ErrorResponse, JoinRoomRequest, JoinRoomResponse, ReadyRequest, ReadyResponse
 from server.exceptions import GameError, RoomError, PlayerError
 from fastapi.middleware.cors import CORSMiddleware
 from server.sockets import ConnectionManager
@@ -48,19 +48,20 @@ def create_room() -> CreateRoomResponse:
     summary="Join an existing room as Player 2",
     responses={409: {"model": ErrorResponse, "description": "Error joining room"}}
 )
-def join_room(room_code: str) -> JoinRoomResponse:
+def join_room(body: JoinRoomRequest) -> JoinRoomResponse:
     """Joins a room and returns the player's generated ID"""
-    return JoinRoomResponse(player_id=gm.join_room(room_code))
+    return JoinRoomResponse(room_code=body.room_code,
+                            player_id=gm.join_room(body.room_code))
 
 @app.post(
     "/ready",
     summary="Set a player as ready to start the game",
     responses={409: {"model": ErrorResponse, "description": "Error readying up player"}}
 )
-def ready(room_code: str, player_id: str) -> ReadyResponse:
-    player = gm.get_room(room_code).get_player(UUID(player_id))
+def ready(body: ReadyRequest) -> ReadyResponse:
+    player = gm.get_room(body.room_code).get_player(body.player_id)
     player.set_ready()
-    return ReadyResponse(message=f"Room {room_code}: {player_id} set to ready")
+    return ReadyResponse(message=f"Room {body.room_code}: {body.player_id} set to ready")
 
 @app.websocket("/game/{room_code}/{player_id}")
 async def websocket_endpoint(websocket: WebSocket, room_code: str, player_id: str):

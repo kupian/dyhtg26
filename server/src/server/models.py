@@ -8,7 +8,15 @@ class RoomState(Enum):
 class CreateRoomResponse(BaseModel):
     room_code: str
     player_id: UUID
+class JoinRoomRequest(BaseModel):
+    room_code: str
+
 class JoinRoomResponse(BaseModel):
+    room_code: str
+    player_id: UUID
+
+class ReadyRequest(BaseModel):
+    room_code: str
     player_id: UUID
 
 class ReadyResponse(BaseModel):
