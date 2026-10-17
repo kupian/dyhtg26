@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from server.game import GameManager, Room
-from server.models import CreateRoomResponse, ErrorResponse, JoinRoomRequest, JoinRoomResponse, ReadyRequest, ReadyResponse, SentenceRequest, SentenceResponse
+from server.models import *
 from server.exceptions import GameError, RoomError, PlayerError
 from fastapi.middleware.cors import CORSMiddleware
 from server.sockets import ConnectionManager
@@ -13,10 +13,13 @@ gm = GameManager()
 origins = [
     "http://localhost:8080",
 ]
+# Front-end served from this machine's LAN address (10.x, 172.16-31.x, 192.168.x)
+lan_origin_regex = r"http://(10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|192\.168\.\d+\.\d+):8080"
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
+    allow_origin_regex=lan_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -58,9 +61,9 @@ def join_room(body: JoinRoomRequest) -> JoinRoomResponse:
     summary="Set a player as ready to start the game",
     responses={409: {"model": ErrorResponse, "description": "Error readying up player"}}
 )
-def ready(body: ReadyRequest) -> ReadyResponse:
-    player = gm.get_room(body.room_code).get_player(body.player_id)
-    player.set_ready()
+async def ready(body: ReadyRequest) -> ReadyResponse:
+    room = gm.get_room(body.room_code)
+    await room.set_player_ready(body.player_id)
     return ReadyResponse(message=f"Room {body.room_code}: {body.player_id} set to ready")
 
 @app.post(
@@ -71,6 +74,25 @@ def ready(body: ReadyRequest) -> ReadyResponse:
 def sentence(body: SentenceRequest) -> SentenceResponse:
     sentence = gm.get_room(body.room_code).get_sentence()
     return SentenceResponse(sentence=sentence.as_ascii())
+
+@app.post(
+    "/keystroke",
+    summary="Send a keystroke to an active room",
+    responses={409: {"model": ErrorResponse, "description": "Error sending keystroke"}}
+)
+async def keystroke(body: KeystrokeRequest) -> KeystrokeResponse:
+    # get player's next correct key
+    room = gm.get_room(body.room_code)
+    if room.room_state != RoomState.PLAYING:
+        raise RoomError("Room is not playing")
+
+    player = room.get_player(body.player_id)
+    await room.type_character(body.player_id, body.symbol)
+
+    return KeystrokeResponse(
+        current_sentence_ascii=player.get_typed_ascii(),
+        current_sentence_morse=player.get_typed_morse(),
+    )
 
 @app.websocket("/game/{room_code}/{player_id}")
 async def websocket_endpoint(websocket: WebSocket, room_code: str, player_id: str):

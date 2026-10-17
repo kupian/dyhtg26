@@ -62,11 +62,16 @@ class Sentence:
 
     def as_morse(self):
         return " ".join([word.as_morse() for word in self.words])
+
 class Player:
     def __init__(self):
         self.id = uuid4()
         self.score = 0
         self.ready = False
+        #self.target_character : Letter | None = None
+        self.typed_morse : str = ""
+        self.typed_ascii : str = ""
+        #self.next_correct_keystroke = ''
 
     def set_ready(self):
         if not self.ready:
@@ -74,9 +79,23 @@ class Player:
         else:
             raise PlayerError("Player is already ready")
 
+    #def get_target_character(self) -> Letter:
+    #    if not self.target_character:
+    #        raise PlayerError("Player has no target character")
+    #    return self.target_character
+
+    def get_typed_morse(self) -> str:
+        return self.typed_morse
+
+    def get_typed_ascii(self) -> str:
+        return self.typed_ascii
+
+    def type_character(self, symbol: str):
+        self.typed_morse += symbol
+        self.typed_ascii = morse.decode_sentence(self.typed_morse)
 
 class Room:
-    max_players = 2
+    MAX_PLAYERS = 2
 
     def __init__(self, code):
         self.code : str = code
@@ -97,7 +116,7 @@ class Room:
         return self.current_sentence
 
     def add_player(self) -> UUID:
-        if len(self.players) < self.max_players:
+        if len(self.players) < self.MAX_PLAYERS:
             p = Player()
             self.players[p.id] = p
             return p.id
@@ -110,19 +129,36 @@ class Room:
             raise RoomError("Player does not exist")
         return player
 
-    def set_player_ready(self, player_id: UUID):
+    async def set_player_ready(self, player_id: UUID):
         self.get_player(player_id).set_ready()
-        if all([player.ready for player in self.players.values()]):
-            self.start_room()
+        if len(self.players) == Room.MAX_PLAYERS and all([player.ready for player in self.players.values()]):
+            # If the room is full and all players are ready we can start
+            await self.start_room()
+
+    async def type_character(self, player_id: UUID, symbol: str):
+        player = self.get_player(player_id)
+        player.type_character(symbol)
+        player_id_list = list(self.players.keys())
+        opponent = player_id_list[0] if player_id_list[0] != player_id else player_id_list[1]
+
+        try:
+            await self.connections.update_opponents_sentence(
+                opponent,
+                player.get_typed_morse(),
+                player.get_typed_ascii()
+            )
+        except ConnectionError:
+            # TODO: figure out what happens if the other player disconnects mid-session
+            pass
 
     def get_player_count(self):
         return len(self.players)
 
-    def start_room(self):
+    async def start_room(self):
         if self.room_state == RoomState.WAITING:
             self.room_state = RoomState.PLAYING
             self.generate_new_sentence()
-            _ = self.connections.notify_state_change_all(self.room_state)
+            await self.connections.notify_state_change_all(self.room_state)
         else:
             raise RoomError("Room cannot be started now")
 
