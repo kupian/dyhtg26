@@ -90,7 +90,4 @@ class GameManager():
         if not room:
             raise GameError("Room does not exist")
 
-        try:
-            return room.add_player()
-        except RoomError as re:
-            return re
+        return room.add_player()

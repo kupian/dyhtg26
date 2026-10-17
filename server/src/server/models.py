@@ -10,3 +10,9 @@ class RoomControlOption(Enum):
 class RoomControl(BaseModel):
     command: RoomControlOption
     player_id: UUID | None
+
+class CreateRoomResponse(BaseModel):
+    room_code: str
+
+class ErrorResponse(BaseModel):
+    detail: str
