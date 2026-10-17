@@ -79,7 +79,11 @@ def sentence(body: SentenceRequest) -> SentenceResponse:
 )
 def keystroke(body: KeystrokeRequest) -> KeystrokeResponse:
     # get player's next correct key
-    player = gm.get_room(body.room_code).get_player(body.player_id)
+    room = gm.get_room(body.room_code)
+    if room.room_state != RoomState.PLAYING:
+        raise RoomError("Room is not playing")
+
+    player = room.get_player(body.player_id)
 
     """
     if player.next_correct_keystroke == body.symbol:
@@ -93,15 +97,15 @@ def keystroke(body: KeystrokeRequest) -> KeystrokeResponse:
     player.type_character(body.symbol)
 
     #! ------
-    target_character = player.get_target_character()
+    #target_character = player.get_target_character()
     typed_sentence = player.get_typed_sentence()
 
 
     return KeystrokeResponse(
         correct=correct,
-        current_sentence_ascii=typed_sentence.as_ascii(),
-        current_sentence_morse=typed_sentence.as_morse(),
-        current_target_character=target_character.as_ascii()
+        current_sentence_ascii=typed_sentence,
+        current_sentence_morse=typed_sentence,
+        #current_target_character=target_character.as_ascii()
     )
 
 @app.websocket("/game/{room_code}/{player_id}")
