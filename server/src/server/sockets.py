@@ -26,5 +26,5 @@ class ConnectionManager:
     async def notify_state_change_all(self, state: RoomState):
         for c in self.active_connections.values():
             await c.websocket.send_json({
-                "state": state
+                "state": state.value
             })
