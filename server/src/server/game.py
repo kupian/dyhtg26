@@ -68,9 +68,9 @@ class Player:
         self.id = uuid4()
         self.score = 0
         self.ready = False
-        self.target_character : Letter | None = None
-        self.typed_sentence : Sentence = Sentence("")
-        self.next_correct_keystroke = ''
+        #self.target_character : Letter | None = None
+        self.typed_sentence : str = ""
+        #self.next_correct_keystroke = ''
 
     def set_ready(self):
         if not self.ready:
@@ -78,22 +78,20 @@ class Player:
         else:
             raise PlayerError("Player is already ready")
 
-    def get_target_character(self) -> Letter:
-        if not self.target_character:
-            raise PlayerError("Player has no target character")
-        return self.target_character
+    #def get_target_character(self) -> Letter:
+    #    if not self.target_character:
+    #        raise PlayerError("Player has no target character")
+    #    return self.target_character
 
-    def get_typed_sentence(self) -> Sentence:
+    def get_typed_sentence(self) -> str:
         return self.typed_sentence
 
     def advance_next_keystroke(self):
         # TODO: implement actual gameplay
         pass
 
-    def type_character(self, c: str):
-        self.typed_sentence = Sentence(
-            self.typed_sentence.as_morse() + c
-        )
+    def type_character(self, symbol: str):
+        self.typed_sentence += symbol
 
 
 class Room:
@@ -133,7 +131,7 @@ class Room:
 
     async def set_player_ready(self, player_id: UUID):
         self.get_player(player_id).set_ready()
-        if len([player.ready for player in self.players.values()]) == Room.MAX_PLAYERS:
+        if len(self.players) == Room.MAX_PLAYERS and all([player.ready for player in self.players.values()]):
             # If the room is full and all players are ready we can start
             await self.start_room()
 
