@@ -46,6 +46,7 @@ def join_room(room_code: str) -> JoinRoomResponse:
 )
 def ready(room_code: str, player_id: str) -> ReadyResponse:
     player = gm.get_room(room_code).get_player(UUID(player_id))
+    player.set_ready()
     return ReadyResponse(message=f"Room {room_code}: {player_id} set to ready")
 
 @app.websocket("/game/{room_code}/{player_id}")
