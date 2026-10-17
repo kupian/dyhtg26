@@ -1,230 +1,152 @@
-import { useMemo } from "react";
 import type { LobbyProps } from "../types";
 import { MORSE_MAP } from "../types";
-import { sound } from "../sound";
+import { MENU_ITEMS, SETTINGS_ITEMS, SUBMENU_ITEMS } from "../menu";
+import { prettyMorse } from "../morse";
+
+// Object key order puts "0"–"9" first; show A–Z, then digits.
+const CHART_ENTRIES = Object.entries(MORSE_MAP).sort(
+  ([a], [b]) => Number(/\d/.test(a)) - Number(/\d/.test(b)) || a.localeCompare(b)
+);
 
 export default function Lobby({
-  onCreate,
+  menuIndex,
+  isExpanded,
+  subIndex,
+  isJoining,
+  joinCode,
+  isJoinCodeInvalid,
   isLoading,
   errorMessage,
-  onClearError,
+  onMenuItemClick,
+  onSubItemClick,
+  showChart,
+  showSettings,
+  settingsIndex,
+  onSettingClick,
   isMuted,
-  onToggleMute,
-  selectedIndex = 0,
-  onSelectIndexChange,
-  isJoining = false,
-  onToggleJoining,
-  joinCode = "",
-  isJoinCodeInvalid = false,
-  showRefModal = false,
-  onToggleRefModal,
-  showSettingsModal = false,
-  onToggleSettingsModal,
-  onTriggerMessageDelivery,
 }: LobbyProps) {
-  const MENU_OPTIONS = useMemo(
-    () => [
-      {
-        id: "create",
-        label: "CREATE GAME",
-        action: () => {
-          onTriggerMessageDelivery?.("CREATING ROOM...");
-          void onCreate();
-        },
-      },
-      {
-        id: "join",
-        label: "JOIN GAME",
-        action: () => {
-          onToggleJoining?.(true);
-          onClearError?.();
-          onTriggerMessageDelivery?.("ENTER 4 SIGNAL CODE TO JOIN");
-        },
-      },
-      {
-        id: "ref",
-        label: "MORSE CHART",
-        action: () => {
-          onToggleRefModal?.(true);
-          onTriggerMessageDelivery?.("MORSE ALPHABET CHART");
-        },
-      },
-      {
-        id: "settings",
-        label: "SETTINGS",
-        action: () => {
-          onToggleSettingsModal?.(true);
-          onTriggerMessageDelivery?.("SETTINGS & CONTROLS");
-        },
-      },
-    ],
-    [onCreate, onToggleJoining, onClearError, onToggleRefModal, onToggleSettingsModal, onTriggerMessageDelivery]
-  );
+  // Chart and settings replace the menu in place, so the pads stay usable.
+  if (showChart) {
+    return (
+      <div className="center-panel">
+        <h2 className="panel-title">MORSE CHART</h2>
+        <div className="reference-grid">
+          {CHART_ENTRIES.map(([char, morse]) => (
+            <div key={char} className="ref-item">
+              <span className="ref-char">{char}</span>
+              <span className="ref-morse">{prettyMorse(morse)}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (showSettings) {
+    return (
+      <div className="center-panel">
+        <h2 className="panel-title">SETTINGS</h2>
+        <div className="menu-list">
+          {SETTINGS_ITEMS.map((item, index) => (
+            <div
+              key={item.id}
+              className={`menu-item ${index === settingsIndex ? "selected" : ""}`}
+              onClick={() => onSettingClick(index)}
+            >
+              <span className="arrow">›</span>
+              <span>{item.label}</span>
+              {item.id === "sound" && (
+                <span className={`setting-value ${isMuted ? "off" : "on"}`}>{isMuted ? "OFF" : "ON"}</span>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <dl className="controls-list">
+          <dt>Z · LEFT</dt>
+          <dd>SELECT · DOT</dd>
+          <dt>X · RIGHT</dt>
+          <dd>NEXT · DASH</dd>
+          <dt>BOTH</dt>
+          <dd>BACK · END LETTER</dd>
+          <dt>BOTH ×2</dt>
+          <dd>SPACE (WHILE TYPING)</dd>
+          <dt>HOLD BOTH</dt>
+          <dd>LEAVE A GAME</dd>
+        </dl>
+      </div>
+    );
+  }
 
   return (
     <div className="center-panel">
       {errorMessage && (
-        <div className="error-banner">
-          <span>{errorMessage}</span>
-          <button type="button" onClick={onClearError} aria-label="Dismiss error">
-            ✕
-          </button>
-        </div>
+        <p className="error-banner" role="alert">
+          {errorMessage}
+        </p>
       )}
 
-      <div className="menu-list">
-        {MENU_OPTIONS.map((item, index) => {
-          const isSelected = index === selectedIndex;
-
-          if (item.id === "join" && isJoining) {
-            return (
-              <div
-                key={item.id}
-                className={`menu-item join-inline ${isJoinCodeInvalid ? "invalid" : ""}`}
-                onClick={() => {
-                  onSelectIndexChange?.(index);
-                  sound.playMenu(isMuted ?? false);
-                }}
-              >
-                <span>JOIN GAME &gt;</span>
-                <span className="join-code-chars">{joinCode || "____"}</span>
-                <span className="cursor" />
-              </div>
-            );
-          }
+      <nav className="menu-list">
+        {MENU_ITEMS.map((item, index) => {
+          const isHighlighted = index === menuIndex;
+          const isOpen = isHighlighted && isExpanded;
 
           return (
-            <div
-              key={item.id}
-              className={`menu-item ${isSelected ? "selected" : ""}`}
-              onClick={() => {
-                onSelectIndexChange?.(index);
-                sound.playMenu(isMuted ?? false);
-                item.action();
-              }}
-            >
-              <span className="arrow">&gt;</span>
-              <span>
-                {item.label}
-                {isLoading && isSelected && item.id === "create" ? "..." : ""}
-              </span>
+            <div key={item.id} className="menu-group">
+              <div
+                className={`menu-item mode-${item.title} ${isHighlighted && !isExpanded ? "selected" : ""} ${isOpen ? "open" : ""}`}
+                onClick={() => onMenuItemClick(index)}
+              >
+                <span className="arrow">›</span>
+                <span>
+                  {item.label}
+                  {isOpen ? ":" : ""}
+                </span>
+              </div>
+
+              {/* Python-style indented block under the open mode */}
+              {isOpen && (
+                <div className={`submenu mode-${item.mode}`}>
+                  {SUBMENU_ITEMS.map((sub, j) => {
+                    const isSubSelected = j === subIndex;
+
+                    if (sub.id === "join" && isJoining) {
+                      return (
+                        <div
+                          key={sub.id}
+                          className={`menu-item join-inline selected ${isJoinCodeInvalid ? "invalid" : ""}`}
+                        >
+                          <span className="arrow">›</span>
+                          <span>JOIN</span>
+                          {/* No placeholder: the cursor sits right after what's been entered */}
+                          <span className="join-code-chars">
+                            {prettyMorse(joinCode)}
+                            <span className="cursor" />
+                          </span>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div
+                        key={sub.id}
+                        className={`menu-item ${isSubSelected ? "selected" : ""}`}
+                        onClick={() => onSubItemClick(j)}
+                      >
+                        <span className="arrow">›</span>
+                        <span>
+                          {sub.label}
+                          {isLoading && isSubSelected && sub.id === "create" ? "…" : ""}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           );
         })}
-      </div>
-
-      {showRefModal && (
-        <div className="modal-overlay" onClick={() => onToggleRefModal?.(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <span className="modal-title">MORSE CODE ALPHABET</span>
-              <button
-                type="button"
-                className="icon-btn"
-                onClick={() => onToggleRefModal?.(false)}
-              >
-                ✕
-              </button>
-            </div>
-            <div className="modal-body">
-              <div className="reference-grid">
-                {Object.entries(MORSE_MAP)
-                  .filter(([k]) => k !== " ")
-                  .map(([char, morse]) => (
-                    <div key={char} className="ref-item">
-                      <span className="ref-char">{char.toUpperCase()}</span>
-                      <span className="ref-morse">{morse}</span>
-                    </div>
-                  ))}
-              </div>
-              <div style={{ textAlign: "center", fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                PRESS BOTH BUTTONS TWICE TO EXIT
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showSettingsModal && (
-        <div className="modal-overlay" onClick={() => onToggleSettingsModal?.(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <span className="modal-title">SETTINGS &amp; AUDIO</span>
-              <button
-                type="button"
-                className="icon-btn"
-                onClick={() => onToggleSettingsModal?.(false)}
-              >
-                ✕
-              </button>
-            </div>
-            <div className="modal-body">
-              <div className="settings-group">
-                <span className="settings-label">AUDIO SOUND</span>
-                <div className="settings-row">
-                  <span className="settings-name">AUDIO PREFERENCE</span>
-                  <button
-                    type="button"
-                    className={`settings-toggle-btn ${isMuted ? "danger" : "primary"}`}
-                    onClick={() => {
-                      onToggleMute?.();
-                      sound.playMenu(false);
-                    }}
-                  >
-                    {isMuted ? "MUTED (OFF)" : "ACTIVE (ON)"}
-                  </button>
-                </div>
-              </div>
-
-              <div className="settings-group">
-                <span className="settings-label">AUDIO TEST</span>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
-                  <button
-                    type="button"
-                    className="secondary"
-                    onClick={() => sound.playDot(isMuted ?? false)}
-                  >
-                    TEST DOT (·)
-                  </button>
-                  <button
-                    type="button"
-                    className="secondary"
-                    onClick={() => sound.playDash(isMuted ?? false)}
-                  >
-                    TEST DASH (—)
-                  </button>
-                </div>
-              </div>
-
-              <div className="settings-group">
-                <span className="settings-label">2-BUTTON CONTROLS SPECIFICATION</span>
-                <div className="controls-card">
-                  <div className="control-item">
-                    <span>LEFT BUTTON [ . / Z ]:</span>
-                    <span style={{ color: "var(--highlight)", fontWeight: "bold" }}>DOT / SELECT OPTION</span>
-                  </div>
-                  <div className="control-item">
-                    <span>RIGHT BUTTON [ - / X ]:</span>
-                    <span style={{ color: "var(--highlight)", fontWeight: "bold" }}>DASH / NEXT OPTION</span>
-                  </div>
-                  <div className="control-item" style={{ borderTop: "1px dashed var(--surface-border)", paddingTop: "0.4rem" }}>
-                    <span>BOTH BUTTONS 1x (ONCE):</span>
-                    <span style={{ color: "var(--highlight)", fontWeight: "bold" }}>ENTER / CONFIRM</span>
-                  </div>
-                  <div className="control-item">
-                    <span>BOTH BUTTONS 2x (TWICE):</span>
-                    <span style={{ color: "var(--highlight)", fontWeight: "bold" }}>BACK / CANCEL / LEAVE</span>
-                  </div>
-                </div>
-              </div>
-
-              <div style={{ textAlign: "center", fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                PRESS BOTH BUTTONS TWICE TO EXIT
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      </nav>
     </div>
   );
 }
