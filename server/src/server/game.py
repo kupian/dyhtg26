@@ -69,7 +69,8 @@ class Player:
         self.score = 0
         self.ready = False
         #self.target_character : Letter | None = None
-        self.typed_sentence : str = ""
+        self.typed_morse : str = ""
+        self.typed_ascii : str = ""
         #self.next_correct_keystroke = ''
 
     def set_ready(self):
@@ -83,16 +84,15 @@ class Player:
     #        raise PlayerError("Player has no target character")
     #    return self.target_character
 
-    def get_typed_sentence(self) -> str:
-        return self.typed_sentence
+    def get_typed_morse(self) -> str:
+        return self.typed_morse
 
-    def advance_next_keystroke(self):
-        # TODO: implement actual gameplay
-        pass
+    def get_typed_ascii(self) -> str:
+        return self.typed_ascii
 
     def type_character(self, symbol: str):
-        self.typed_sentence += symbol
-
+        self.typed_morse += symbol
+        self.typed_ascii = morse.decode_sentence(self.typed_morse)
 
 class Room:
     MAX_PLAYERS = 2
