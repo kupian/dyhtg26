@@ -13,10 +13,8 @@ export type JoinRoomResponse = { room_code: string; player_id: string };
 export type ReadyResponse = { message: string };
 export type SentenceResponse = { sentence: string };
 export type KeystrokeResponse = {
-  correct: boolean;
   current_sentence_ascii: string;
   current_sentence_morse: string;
-  current_target_character: string;
 };
 
 /** POST JSON and parse JSON, with a timeout and a real error on non-2xx. */
@@ -76,6 +74,7 @@ export const joinRoom = (roomCode: RoomCode) =>
 export const readyUp = (roomCode: RoomCode, playerId: string) =>
   postJSON<ReadyResponse>("/ready", { room_code: roomCode, player_id: playerId });
 
+/** Unused while the MVP is a free-typing chat room; kept for the sentence duel. */
 export const getSentence = (roomCode: RoomCode) =>
   postJSON<SentenceResponse>("/sentence", { room_code: roomCode });
 

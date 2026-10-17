@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import type { KeySymbol, LogEntry, RoomCode, RoomState, SocketStatus, StateChangeMessage } from "./types";
-import { MORSE_MAP } from "./types";
+import type { KeySymbol, LogEntry, RoomCode, RoomState, SocketStatus, StateChangeMessage, TypedMessage } from "./types";
+import { EMPTY_TYPED, MORSE_MAP } from "./types";
 import * as api from "./api";
 import { sound } from "./sound";
 import Lobby from "./component/Lobby";
@@ -27,14 +27,13 @@ export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [roomState, setRoomState] = useState<RoomState>("WAITING");
   const [socketStatus, setSocketStatus] = useState<SocketStatus>("closed");
-  const [sentence, setSentence] = useState<string | null>(null);
   const [events, setEvents] = useState<LogEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isReady, setIsReady] = useState(false);
   const [isReadying, setIsReadying] = useState(false);
-  // Latest current_sentence_morse from /keystroke — the server owns typed state.
-  const [typedMorse, setTypedMorse] = useState("");
+  // Latest typed message from /keystroke — the server owns typed state.
+  const [typed, setTyped] = useState<TypedMessage>(EMPTY_TYPED);
 
   // --- Audio / design state (from ai-front-end-test) ------------------------
   const [isMuted, setIsMuted] = useState(false);
@@ -109,8 +108,8 @@ export default function App() {
   );
 
   const addTapeSymbol = useCallback((symbol: KeySymbol) => {
-    const displayChar = symbol === "." ? "·" : "—";
-    setTapeItems((prev) => [...prev, { char: displayChar, morse: symbol }].slice(-16));
+    const item = symbol === " " ? { char: " ", morse: " " } : { char: symbol === "." ? "·" : "—", morse: symbol };
+    setTapeItems((prev) => [...prev, item].slice(-16));
   }, []);
 
   const deliverMorseMessage = useCallback(
@@ -183,20 +182,6 @@ export default function App() {
 
   // --- Backend integration --------------------------------------------------
 
-  const loadSentence = useCallback(
-    async (roomCode: RoomCode) => {
-      log("→ POST /sentence");
-      try {
-        const data = await api.getSentence(roomCode);
-        log(`← sentence: "${data.sentence}"`);
-        setSentence(data.sentence);
-      } catch (err) {
-        log(`✗ /sentence: ${api.describeError(err)}`);
-      }
-    },
-    [log]
-  );
-
   const connect = useCallback(
     (roomCode: RoomCode, playerId: string) => {
       const ws = api.openRoomSocket(roomCode, playerId);
@@ -226,7 +211,6 @@ export default function App() {
 
         if ("state" in msg && typeof msg.state === "string") {
           setRoomState(msg.state as RoomState);
-          if (msg.state === "PLAYING") void loadSentence(roomCode);
         }
 
         // Future-proof: opponent signal flashes
@@ -246,7 +230,7 @@ export default function App() {
         log(`← WS closed (${ev.code}${ev.reason ? `: ${ev.reason}` : ""})`);
       };
     },
-    [log, loadSentence, triggerFlash, isMuted]
+    [log, triggerFlash, isMuted]
   );
 
   const enterRoom = useCallback(
@@ -255,8 +239,7 @@ export default function App() {
       setSession({ roomCode, playerId, isHost });
       setRoomState("WAITING");
       setSocketStatus("closed");
-      setSentence(null);
-      setTypedMorse("");
+      setTyped(EMPTY_TYPED);
       appliedKeystrokeSeqRef.current = keystrokeSeqRef.current;
       setError(null);
       setIsReady(false);
@@ -316,8 +299,7 @@ export default function App() {
     setSession(null);
     setSocketStatus("closed");
     setRoomState("WAITING");
-    setSentence(null);
-    setTypedMorse("");
+    setTyped(EMPTY_TYPED);
     appliedKeystrokeSeqRef.current = keystrokeSeqRef.current;
     setEvents([]);
     setError(null);
@@ -351,18 +333,21 @@ export default function App() {
     async (symbol: KeySymbol) => {
       if (!session) return;
       addTapeSymbol(symbol);
-      triggerFlash(symbol === "." ? 90 : 240);
-      if (symbol === ".") sound.playDot(isMuted);
-      else sound.playDash(isMuted);
+      // A space comes from the chord, which already flashes and plays the menu sound.
+      if (symbol !== " ") {
+        triggerFlash(symbol === "." ? 90 : 240);
+        if (symbol === ".") sound.playDot(isMuted);
+        else sound.playDash(isMuted);
+      }
 
-      log(`→ POST /keystroke ${symbol}`);
+      log(`→ POST /keystroke ${JSON.stringify(symbol)}`);
       const seq = ++keystrokeSeqRef.current;
       try {
         const data = await api.sendKeystroke(session.roomCode, session.playerId, symbol);
         log(`← keystroke: ${JSON.stringify(data)}`);
         if (seq > appliedKeystrokeSeqRef.current) {
           appliedKeystrokeSeqRef.current = seq;
-          setTypedMorse(data.current_sentence_morse);
+          setTyped({ ascii: data.current_sentence_ascii, morse: data.current_sentence_morse });
         }
       } catch (err) {
         log(`✗ /keystroke: ${api.describeError(err)}`);
@@ -393,6 +378,9 @@ export default function App() {
     if (session) {
       if (roomState === "WAITING") {
         void readyUp();
+      } else if (roomState === "PLAYING") {
+        // Both buttons together ends the current letter.
+        void sendKeystroke(" ");
       }
       return;
     }
@@ -435,6 +423,7 @@ export default function App() {
     createRoom,
     deliverMorseMessage,
     readyUp,
+    sendKeystroke,
   ]);
 
   const handleBackAction = useCallback(() => {
@@ -725,8 +714,7 @@ export default function App() {
           isHost={session.isHost}
           roomState={roomState}
           socketStatus={socketStatus}
-          sentence={sentence}
-          typedMorse={typedMorse}
+          typed={typed}
           events={events}
           isReady={isReady}
           isReadying={isReadying}

@@ -37,9 +37,14 @@ export type StateChangeMessage = { state: RoomState };
 
 export type SocketStatus = "connecting" | "open" | "closed";
 
-export type KeySymbol = "." | "-";
+/** Dot, dash, or " " to end the current letter. */
+export type KeySymbol = "." | "-" | " ";
 
 export type LogEntry = { id: number; time: string; text: string };
+
+/** What the player has typed, as decoded by the server in the last /keystroke response. */
+export type TypedMessage = { ascii: string; morse: string };
+export const EMPTY_TYPED: TypedMessage = { ascii: "", morse: "" };
 
 export interface RoomProps {
   roomCode: RoomCode;
@@ -47,9 +52,7 @@ export interface RoomProps {
   isHost: boolean;
   roomState: RoomState;
   socketStatus: SocketStatus;
-  sentence: string | null;
-  /** current_sentence_morse from the last /keystroke response */
-  typedMorse: string;
+  typed: TypedMessage;
   events: LogEntry[];
   isReady: boolean;
   isReadying: boolean;

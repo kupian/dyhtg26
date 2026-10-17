@@ -1,5 +1,4 @@
 import type { RoomProps } from "../types";
-import { ServerText } from "./ServerText";
 
 export default function Room({
   roomCode,
@@ -7,8 +6,7 @@ export default function Room({
   isHost,
   roomState,
   socketStatus,
-  sentence,
-  typedMorse,
+  typed,
   events,
   isReady,
   isReadying,
@@ -72,34 +70,16 @@ export default function Room({
       {roomState === "PLAYING" && (
         <div className="duel-track">
           <div className="duel-track-header">
-            <span>TRANSMISSION</span>
-            <span>{sentence ? `${sentence.length} CHARS` : "LOADING"}</span>
-          </div>
-
-          {sentence ? (
-            <>
-              <div className="transmission-display">
-                <ServerText sentence={sentence} step={0} maxWidth={372} />
-              </div>
-              <p className="sentence" style={{ textAlign: "center", color: "var(--highlight)" }}>
-                {sentence}
-              </p>
-            </>
-          ) : (
-            <div className="transmission-display">
-              <span className="decoded-stream">LOADING SENTENCE…</span>
-            </div>
-          )}
-
-          <div className="duel-track-header">
-            <span>YOUR SIGNAL</span>
+            <span>YOUR MESSAGE</span>
+            <span>{typed.ascii.length} CHARS</span>
           </div>
           <div className="transmission-display">
-            <span className="morse-stream typed-morse">{typedMorse || "_"}</span>
+            <span className="decoded-stream typed-ascii">{typed.ascii || "_"}</span>
+            <span className="morse-stream typed-morse">{typed.morse}</span>
           </div>
 
           <p className="hint" style={{ textAlign: "center" }}>
-            Tap DOT / DASH or press . / -
+            Tap DOT / DASH or press . / - · Both together = letter space
           </p>
         </div>
       )}

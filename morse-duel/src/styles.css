@@ -1057,3 +1057,8 @@ button:disabled {
   font-size: 1.25rem;
   overflow-wrap: anywhere;
 }
+
+.typed-ascii {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
