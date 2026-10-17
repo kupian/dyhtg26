@@ -1,6 +1,6 @@
 import type { LobbyProps } from "../types";
 import { MORSE_MAP } from "../types";
-import { MENU_ITEMS, SETTINGS_ITEMS, SUBMENU_ITEMS } from "../menu";
+import { MENU_ITEMS, SETTINGS_ITEMS, SUBMENU_ITEMS, formatSeconds } from "../menu";
 import { prettyMorse } from "../morse";
 
 // Object key order puts "0"–"9" first; show A–Z, then digits.
@@ -24,6 +24,7 @@ export default function Lobby({
   settingsIndex,
   onSettingClick,
   isMuted,
+  letterHoldMs,
 }: LobbyProps) {
   // Chart and settings replace the menu in place, so the pads stay usable.
   if (showChart) {
@@ -58,6 +59,7 @@ export default function Lobby({
               {item.id === "sound" && (
                 <span className={`setting-value ${isMuted ? "off" : "on"}`}>{isMuted ? "OFF" : "ON"}</span>
               )}
+              {item.id === "letterHold" && <span className="setting-value">{formatSeconds(letterHoldMs)}</span>}
             </div>
           ))}
         </div>
@@ -67,10 +69,12 @@ export default function Lobby({
           <dd>SELECT · DOT</dd>
           <dt>X · RIGHT</dt>
           <dd>NEXT · DASH</dd>
+          <dt>HOLD STROKE</dt>
+          <dd>END LETTER ({formatSeconds(letterHoldMs)})</dd>
+          <dt>PAUSE 1s</dt>
+          <dd>END LETTER</dd>
           <dt>BOTH</dt>
-          <dd>BACK · END LETTER</dd>
-          <dt>BOTH ×2</dt>
-          <dd>SPACE (WHILE TYPING)</dd>
+          <dd>BACK · SPACE</dd>
           <dt>HOLD BOTH</dt>
           <dd>LEAVE A GAME</dd>
         </dl>

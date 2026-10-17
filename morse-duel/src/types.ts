@@ -59,10 +59,12 @@ export type LobbyProps = {
   settingsIndex: number;
   onSettingClick: (index: number) => void;
   isMuted: boolean;
+  letterHoldMs: number;
 };
 
 export interface RoomProps {
   mode: RoomMode;
+  roomCode: RoomCode;
   isHost: boolean;
   roomState: RoomState;
   socketStatus: SocketStatus;

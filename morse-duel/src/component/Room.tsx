@@ -1,8 +1,10 @@
 import type { RoomProps } from "../types";
+import { prettyMorse } from "../morse";
 import MessageLane from "./MessageLane";
 
 export default function Room({
   mode,
+  roomCode,
   isHost,
   roomState,
   socketStatus,
@@ -18,6 +20,10 @@ export default function Room({
     <main className={`room mode-${mode}`}>
       {roomState === "WAITING" && (
         <section className="lobby-panel">
+          <p className="room-code-line">
+            ROOM: <span className="room-code">{prettyMorse(roomCode)}</span>
+          </p>
+
           <div className="players-grid">
             <div className="player-card is-you">
               <div className="player-card-header">
@@ -36,8 +42,6 @@ export default function Room({
               <span className="player-status">WAITING…</span>
             </div>
           </div>
-
-          {isHost && <p className="hint">Share the room code with your opponent.</p>}
 
           <button
             type="button"
