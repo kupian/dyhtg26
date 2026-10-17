@@ -3,9 +3,22 @@ export type RoomCode = string;
 export type LobbyProps = {
   onCreate: () => void | Promise<void>;
   onJoin: (code: RoomCode) => void | Promise<void>;
-  error?: string | null;
   isLoading?: boolean;
-  onDismissError?: () => void;
+  errorMessage?: string | null;
+  onClearError?: () => void;
+  isMuted?: boolean;
+  onToggleMute?: () => void;
+  selectedIndex?: number;
+  onSelectIndexChange?: (index: number) => void;
+  isJoining?: boolean;
+  onToggleJoining?: (joining: boolean) => void;
+  joinCode?: string;
+  onJoinCodeChange?: (code: string) => void;
+  showRefModal?: boolean;
+  onToggleRefModal?: (show: boolean) => void;
+  showSettingsModal?: boolean;
+  onToggleSettingsModal?: (show: boolean) => void;
+  onTriggerMessageDelivery?: (text: string) => void;
 };
 
 export const MORSE_MAP: Record<string, string> = {
@@ -31,10 +44,16 @@ export type LogEntry = { id: number; time: string; text: string };
 export interface RoomProps {
   roomCode: RoomCode;
   playerId: string;
+  isHost: boolean;
   roomState: RoomState;
   socketStatus: SocketStatus;
   sentence: string | null;
   events: LogEntry[];
+  isReady: boolean;
+  isReadying: boolean;
+  isMuted: boolean;
   onLog: (text: string) => void;
   onLeave: () => void;
+  onReady: () => void;
+  onSendSignal: (symbol: KeySymbol) => void;
 }
