@@ -16,12 +16,25 @@ export const MORSE_MAP: Record<string, string> = {
   Y: "-.--", Z: "--.."
 };
 
-export interface LobbyProps {
-  onCreate: () => void;
-  onJoin: (code: RoomCode) => void;
-}
+/** Mirrors server RoomState (server/src/server/models.py). */
+export type RoomState = "WAITING" | "PLAYING" | "FINISHED";
+
+/** Broadcast on the game socket by ConnectionManager.notify_state_change_all. */
+export type StateChangeMessage = { state: RoomState };
+
+export type SocketStatus = "connecting" | "open" | "closed";
+
+export type KeySymbol = "." | "-";
+
+export type LogEntry = { id: number; time: string; text: string };
 
 export interface RoomProps {
   roomCode: RoomCode;
+  playerId: string;
+  roomState: RoomState;
+  socketStatus: SocketStatus;
+  sentence: string | null;
+  events: LogEntry[];
+  onLog: (text: string) => void;
   onLeave: () => void;
 }
