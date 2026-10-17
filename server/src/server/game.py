@@ -62,11 +62,15 @@ class Sentence:
 
     def as_morse(self):
         return " ".join([word.as_morse() for word in self.words])
+
 class Player:
     def __init__(self):
         self.id = uuid4()
         self.score = 0
         self.ready = False
+        self.target_character : Letter | None = None
+        self.typed_sentence : Sentence = Sentence("")
+        self.next_correct_keystroke = ''
 
     def set_ready(self):
         if not self.ready:
@@ -74,9 +78,26 @@ class Player:
         else:
             raise PlayerError("Player is already ready")
 
+    def get_target_character(self) -> Letter:
+        if not self.target_character:
+            raise PlayerError("Player has no target character")
+        return self.target_character
+
+    def get_typed_sentence(self) -> Sentence:
+        return self.typed_sentence
+
+    def advance_next_keystroke(self):
+        # TODO: implement actual gameplay
+        pass
+
+    def type_character(self, c: str):
+        self.typed_sentence = Sentence(
+            self.typed_sentence.as_morse() + c
+        )
+
 
 class Room:
-    max_players = 2
+    MAX_PLAYERS = 2
 
     def __init__(self, code):
         self.code : str = code
@@ -97,7 +118,7 @@ class Room:
         return self.current_sentence
 
     def add_player(self) -> UUID:
-        if len(self.players) < self.max_players:
+        if len(self.players) < self.MAX_PLAYERS:
             p = Player()
             self.players[p.id] = p
             return p.id
@@ -112,7 +133,8 @@ class Room:
 
     async def set_player_ready(self, player_id: UUID):
         self.get_player(player_id).set_ready()
-        if all([player.ready for player in self.players.values()]):
+        if len([player.ready for player in self.players.values()]) == Room.MAX_PLAYERS:
+            # If the room is full and all players are ready we can start
             await self.start_room()
 
     def get_player_count(self):
