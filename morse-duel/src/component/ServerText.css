@@ -1,0 +1,11 @@
+.server-text-container {
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.server-text-content {
+  display: flex;
+  transition: transform 0.3s ease-out;
+}
