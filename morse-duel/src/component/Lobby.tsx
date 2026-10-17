@@ -15,6 +15,7 @@ export default function Lobby({
   isJoining = false,
   onToggleJoining,
   joinCode = "",
+  isJoinCodeInvalid = false,
   showRefModal = false,
   onToggleRefModal,
   showSettingsModal = false,
@@ -79,7 +80,7 @@ export default function Lobby({
             return (
               <div
                 key={item.id}
-                className="menu-item join-inline"
+                className={`menu-item join-inline ${isJoinCodeInvalid ? "invalid" : ""}`}
                 onClick={() => {
                   onSelectIndexChange?.(index);
                   sound.playMenu(isMuted ?? false);
@@ -200,11 +201,11 @@ export default function Lobby({
                 <div className="controls-card">
                   <div className="control-item">
                     <span>LEFT BUTTON [ . / Z ]:</span>
-                    <span style={{ color: "var(--highlight)", fontWeight: "bold" }}>DOT / NAVIGATE UP</span>
+                    <span style={{ color: "var(--highlight)", fontWeight: "bold" }}>DOT / SELECT OPTION</span>
                   </div>
                   <div className="control-item">
                     <span>RIGHT BUTTON [ - / X ]:</span>
-                    <span style={{ color: "var(--highlight)", fontWeight: "bold" }}>DASH / NAVIGATE DOWN</span>
+                    <span style={{ color: "var(--highlight)", fontWeight: "bold" }}>DASH / NEXT OPTION</span>
                   </div>
                   <div className="control-item" style={{ borderTop: "1px dashed var(--surface-border)", paddingTop: "0.4rem" }}>
                     <span>BOTH BUTTONS 1x (ONCE):</span>

@@ -294,6 +294,14 @@ body {
   text-shadow: 0 0 12px var(--highlight-glow-strong);
 }
 
+/* Rejected room code: flash red and shake before it is cleared */
+.join-inline.invalid .join-code-chars {
+  display: inline-block;
+  color: var(--wrong);
+  text-shadow: 0 0 12px var(--wrong-glow);
+  animation: shake 0.3s ease-in-out 2;
+}
+
 .menu-item:hover {
   color: var(--highlight);
   text-shadow: 0 0 10px var(--highlight-glow-strong), 0 0 20px var(--highlight-glow);
