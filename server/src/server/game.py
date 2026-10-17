@@ -135,6 +135,22 @@ class Room:
             # If the room is full and all players are ready we can start
             await self.start_room()
 
+    async def type_character(self, player_id: UUID, symbol: str):
+        player = self.get_player(player_id)
+        player.type_character(symbol)
+        player_id_list = list(self.players.keys())
+        opponent = player_id_list[0] if player_id_list[0] != player_id else player_id_list[1]
+
+        try:
+            await self.connections.update_opponents_sentence(
+                opponent,
+                player.get_typed_morse(),
+                player.get_typed_ascii()
+            )
+        except ConnectionError:
+            # TODO: figure out what happens if the other player disconnects mid-session
+            pass
+
     def get_player_count(self):
         return len(self.players)
 

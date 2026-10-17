@@ -1,7 +1,7 @@
 from fastapi import WebSocket
 from uuid import UUID
 from server.models import RoomState
-import json
+from server.exceptions import ConnectionError
 
 class PlayerConnection:
     def __init__(self, websocket: WebSocket, player_id: UUID):
@@ -11,6 +11,12 @@ class PlayerConnection:
 class ConnectionManager:
     def __init__(self):
         self.active_connections: dict[UUID, PlayerConnection] = {}
+
+    def get_connection(self, player_id: UUID) -> PlayerConnection:
+        connection = self.active_connections.get(player_id)
+        if not connection:
+            raise ConnectionError("That player is not connected")
+        return connection
 
     async def connect(self, websocket: WebSocket, player_id: UUID):
         await websocket.accept()
@@ -28,3 +34,9 @@ class ConnectionManager:
             await c.websocket.send_json({
                 "state": state.value
             })
+
+    async def update_opponents_sentence(self, player_id: UUID, morse_sentence: str, ascii_sentence: str):
+        await self.get_connection(player_id).websocket.send_json({
+            "opponent_morse": morse_sentence,
+            "opponent_ascii": ascii_sentence
+        })

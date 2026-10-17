@@ -3,11 +3,28 @@ from fastapi.responses import JSONResponse
 from server.game import GameManager, Room
 from server.models import *
 from server.exceptions import GameError, RoomError, PlayerError
+from fastapi.middleware.cors import CORSMiddleware
 from server.sockets import ConnectionManager
 from uuid import UUID
 
 app = FastAPI()
 gm = GameManager()
+
+origins = [
+    "http://localhost:8080",
+]
+# Front-end served from this machine's LAN address (10.x, 172.16-31.x, 192.168.x)
+lan_origin_regex = r"http://(10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|192\.168\.\d+\.\d+):8080"
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_origin_regex=lan_origin_regex,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 @app.exception_handler(GameError)
 async def game_error_handler(request: Request, exc: GameError):
@@ -63,14 +80,14 @@ def sentence(body: SentenceRequest) -> SentenceResponse:
     summary="Send a keystroke to an active room",
     responses={409: {"model": ErrorResponse, "description": "Error sending keystroke"}}
 )
-def keystroke(body: KeystrokeRequest) -> KeystrokeResponse:
+async def keystroke(body: KeystrokeRequest) -> KeystrokeResponse:
     # get player's next correct key
     room = gm.get_room(body.room_code)
     if room.room_state != RoomState.PLAYING:
         raise RoomError("Room is not playing")
 
     player = room.get_player(body.player_id)
-    player.type_character(body.symbol)
+    await room.type_character(body.player_id, body.symbol)
 
     return KeystrokeResponse(
         current_sentence_ascii=player.get_typed_ascii(),

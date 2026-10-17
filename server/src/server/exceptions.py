@@ -9,3 +9,6 @@ class PlayerError(GameError):
 
 class EncodingError(GameError):
     pass
+
+class ConnectionError(GameError):
+    pass
