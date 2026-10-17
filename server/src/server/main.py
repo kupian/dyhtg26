@@ -13,10 +13,13 @@ gm = GameManager()
 origins = [
     "http://localhost:8080",
 ]
+# Front-end served from this machine's LAN address (10.x, 172.16-31.x, 192.168.x)
+lan_origin_regex = r"http://(10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|192\.168\.\d+\.\d+):8080"
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
+    allow_origin_regex=lan_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

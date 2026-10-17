@@ -4,6 +4,7 @@ import { defineConfig } from 'vite'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
-  // Must match the CORS origin allowed by the server (server/src/server/main.py)
-  server: { port: 8080, strictPort: true },
+  // Port must match the CORS origins allowed by the server (server/src/server/main.py).
+  // host: true listens on 0.0.0.0 so other devices on the LAN can load the app.
+  server: { host: true, port: 8080, strictPort: true },
 })

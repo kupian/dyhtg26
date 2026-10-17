@@ -1,7 +1,10 @@
 import type { KeySymbol, RoomCode } from "./types";
 
 // --- Module scope: created once, not on every render -------------------------
-const API_BASE: string = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+// Default to port 8000 on whatever host served the page, so a phone loading
+// http://<lan-ip>:8080 talks to http://<lan-ip>:8000 rather than its own localhost.
+const API_BASE: string =
+  import.meta.env.VITE_API_URL ?? `${window.location.protocol}//${window.location.hostname}:8000`;
 const WS_BASE = API_BASE.replace(/^http/, "ws"); // http→ws, https→wss
 const REQUEST_TIMEOUT_MS = 10_000;
 
