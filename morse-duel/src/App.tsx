@@ -1,6 +1,16 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import type { KeySymbol, LogEntry, RoomCode, RoomState, SocketStatus, StateChangeMessage, TypedMessage } from "./types";
-import { EMPTY_TYPED, MORSE_MAP } from "./types";
+import type {
+  KeySymbol,
+  LogEntry,
+  OpponentTypedMessage,
+  RoomCode,
+  RoomState,
+  SocketStatus,
+  StateChangeMessage,
+  TypedMessage,
+  WireSymbol,
+} from "./types";
+import { EMPTY_TYPED, MORSE_MAP, NEWCHAR } from "./types";
 import * as api from "./api";
 import { sound } from "./sound";
 import Lobby from "./component/Lobby";
@@ -14,6 +24,11 @@ interface TapeItem {
 type Session = { roomCode: RoomCode; playerId: string; isHost: boolean };
 
 const MAX_LOG_ENTRIES = 50;
+
+// In-game typing: a letter is finished after this long with no dot/dash...
+const LETTER_IDLE_MS = 1000;
+// ...or by a chord (both buttons). Two chords within this window add a space.
+const DOUBLE_CHORD_MS = 500;
 
 const MENU_OPTIONS = [
   { id: "create", label: "CREATE GAME" },
@@ -34,6 +49,8 @@ export default function App() {
   const [isReadying, setIsReadying] = useState(false);
   // Latest typed message from /keystroke — the server owns typed state.
   const [typed, setTyped] = useState<TypedMessage>(EMPTY_TYPED);
+  // Opponent's typed message, pushed over the game socket as they type.
+  const [opponentTyped, setOpponentTyped] = useState<TypedMessage>(EMPTY_TYPED);
 
   // --- Audio / design state (from ai-front-end-test) ------------------------
   const [isMuted, setIsMuted] = useState(false);
@@ -76,9 +93,14 @@ export default function App() {
   const timeoutsRef = useRef<number[]>([]);
   const socketRef = useRef<WebSocket | null>(null);
   const nextLogId = useRef(0);
-  // Keystroke requests can resolve out of order; only show the newest response.
-  const keystrokeSeqRef = useRef(0);
-  const appliedKeystrokeSeqRef = useRef(0);
+  // The server appends symbols in arrival order, so keystrokes are sent one at a time.
+  const keystrokeQueueRef = useRef<Promise<void>>(Promise.resolve());
+  // Bumped on enter/leave so queued keystrokes from an old room are dropped.
+  const keystrokeGenRef = useRef(0);
+  // Dots/dashes sent since the last NEWCHAR — i.e. a letter is in progress.
+  const letterPendingRef = useRef(false);
+  const letterTimerRef = useRef<number | null>(null);
+  const lastGameChordRef = useRef(0);
 
   const log = useCallback((text: string) => {
     const entry = { id: nextLogId.current++, time: new Date().toLocaleTimeString(), text };
@@ -107,10 +129,26 @@ export default function App() {
     [clearFlashSequence]
   );
 
-  const addTapeSymbol = useCallback((symbol: KeySymbol) => {
+  const addTapeSymbol = useCallback((symbol: KeySymbol | " ") => {
     const item = symbol === " " ? { char: " ", morse: " " } : { char: symbol === "." ? "·" : "—", morse: symbol };
     setTapeItems((prev) => [...prev, item].slice(-16));
   }, []);
+
+  const clearLetterTimer = useCallback(() => {
+    if (letterTimerRef.current !== null) {
+      window.clearTimeout(letterTimerRef.current);
+      letterTimerRef.current = null;
+    }
+  }, []);
+
+  const resetTyping = useCallback(() => {
+    keystrokeGenRef.current++;
+    clearLetterTimer();
+    letterPendingRef.current = false;
+    lastGameChordRef.current = 0;
+    setTyped(EMPTY_TYPED);
+    setOpponentTyped(EMPTY_TYPED);
+  }, [clearLetterTimer]);
 
   const deliverMorseMessage = useCallback(
     (text: string) => {
@@ -201,7 +239,7 @@ export default function App() {
         if (!isCurrent()) return;
         log(`← WS ${ev.data}`);
 
-        let msg: StateChangeMessage | Record<string, unknown>;
+        let msg: StateChangeMessage | OpponentTypedMessage | Record<string, unknown>;
         try {
           msg = JSON.parse(ev.data);
         } catch {
@@ -213,9 +251,15 @@ export default function App() {
           setRoomState(msg.state as RoomState);
         }
 
-        // Future-proof: opponent signal flashes
-        if ("type" in msg && msg.type === "opponent_signal") {
-          const sym = msg.symbol;
+        if (
+          "opponent_morse" in msg &&
+          typeof msg.opponent_morse === "string" &&
+          typeof msg.opponent_ascii === "string"
+        ) {
+          setOpponentTyped({ ascii: msg.opponent_ascii, morse: msg.opponent_morse });
+
+          // Flash/beep the opponent's dot or dash (not their NEWCHAR or space)
+          const sym = msg.opponent_morse.slice(-1);
           if (sym === "." || sym === "-") {
             triggerFlash(sym === "." ? 120 : 260, true);
             if (sym === ".") sound.playDot(isMuted);
@@ -239,14 +283,13 @@ export default function App() {
       setSession({ roomCode, playerId, isHost });
       setRoomState("WAITING");
       setSocketStatus("closed");
-      setTyped(EMPTY_TYPED);
-      appliedKeystrokeSeqRef.current = keystrokeSeqRef.current;
+      resetTyping();
       setError(null);
       setIsReady(false);
       setIsReadying(false);
       connect(roomCode, playerId);
     },
-    [connect]
+    [connect, resetTyping]
   );
 
   const createRoom = useCallback(async () => {
@@ -299,8 +342,7 @@ export default function App() {
     setSession(null);
     setSocketStatus("closed");
     setRoomState("WAITING");
-    setTyped(EMPTY_TYPED);
-    appliedKeystrokeSeqRef.current = keystrokeSeqRef.current;
+    resetTyping();
     setEvents([]);
     setError(null);
     setIsReady(false);
@@ -309,7 +351,7 @@ export default function App() {
     setJoinCode("");
     deliverMorseMessage("STANDBY");
     sound.playMenu(isMuted);
-  }, [deliverMorseMessage, isMuted]);
+  }, [deliverMorseMessage, isMuted, resetTyping]);
 
   const readyUp = useCallback(async () => {
     if (!session || isReady || isReadying) return;
@@ -329,40 +371,94 @@ export default function App() {
     }
   }, [session, isReady, isReadying, log, deliverMorseMessage, isMuted]);
 
-  const sendKeystroke = useCallback(
-    async (symbol: KeySymbol) => {
-      if (!session) return;
-      addTapeSymbol(symbol);
-      // A space comes from the chord, which already flashes and plays the menu sound.
-      if (symbol !== " ") {
-        triggerFlash(symbol === "." ? 90 : 240);
-        if (symbol === ".") sound.playDot(isMuted);
-        else sound.playDash(isMuted);
-      }
+  // --- In-game typing ---------------------------------------------------------
+  // Dots/dashes are sent as typed. A letter is finished by LETTER_IDLE_MS without
+  // input or by one chord, which sends NEWCHAR; two chords in a row add a space.
 
-      log(`→ POST /keystroke ${JSON.stringify(symbol)}`);
-      const seq = ++keystrokeSeqRef.current;
-      try {
-        const data = await api.sendKeystroke(session.roomCode, session.playerId, symbol);
-        log(`← keystroke: ${JSON.stringify(data)}`);
-        if (seq > appliedKeystrokeSeqRef.current) {
-          appliedKeystrokeSeqRef.current = seq;
+  /** Queue a keystroke behind any in flight, so the server sees them in typed order. */
+  const postKeystroke = useCallback(
+    (symbol: WireSymbol) => {
+      if (!session) return;
+      const { roomCode, playerId } = session;
+      const gen = keystrokeGenRef.current;
+
+      keystrokeQueueRef.current = keystrokeQueueRef.current.then(async () => {
+        if (gen !== keystrokeGenRef.current) return; // left the room while queued
+        log(`→ POST /keystroke ${JSON.stringify(symbol)}`);
+        try {
+          const data = await api.sendKeystroke(roomCode, playerId, symbol);
+          if (gen !== keystrokeGenRef.current) return;
+          log(`← keystroke: ${JSON.stringify(data)}`);
           setTyped({ ascii: data.current_sentence_ascii, morse: data.current_sentence_morse });
+        } catch (err) {
+          log(`✗ /keystroke: ${api.describeError(err)}`);
         }
-      } catch (err) {
-        log(`✗ /keystroke: ${api.describeError(err)}`);
-      }
+      });
     },
-    [session, addTapeSymbol, triggerFlash, log, isMuted]
+    [session, log]
   );
 
-  // Close socket on unmount
-  useEffect(() => () => socketRef.current?.close(), []);
+  /** End the letter in progress, if any. */
+  const commitLetter = useCallback(() => {
+    clearLetterTimer();
+    if (!letterPendingRef.current) return;
+    letterPendingRef.current = false;
+    postKeystroke(NEWCHAR);
+  }, [clearLetterTimer, postKeystroke]);
+
+  const typeSymbol = useCallback(
+    (symbol: KeySymbol) => {
+      addTapeSymbol(symbol);
+      triggerFlash(symbol === "." ? 90 : 240);
+      if (symbol === ".") sound.playDot(isMuted);
+      else sound.playDash(isMuted);
+
+      postKeystroke(symbol);
+      letterPendingRef.current = true;
+      lastGameChordRef.current = 0; // a symbol between two chords breaks the double-chord
+      clearLetterTimer();
+      letterTimerRef.current = window.setTimeout(commitLetter, LETTER_IDLE_MS);
+    },
+    [addTapeSymbol, triggerFlash, isMuted, postKeystroke, clearLetterTimer, commitLetter]
+  );
+
+  /** Both buttons together: once ends the letter, twice in a row adds a space. */
+  const handleGameChord = useCallback(() => {
+    const now = Date.now();
+    sound.playMenu(isMuted);
+    triggerFlash(140);
+
+    if (now - lastGameChordRef.current < DOUBLE_CHORD_MS) {
+      lastGameChordRef.current = 0;
+      commitLetter(); // normally already done by the first chord
+      addTapeSymbol(" ");
+      postKeystroke(" ");
+      postKeystroke(NEWCHAR);
+    } else {
+      lastGameChordRef.current = now;
+      commitLetter();
+    }
+  }, [isMuted, triggerFlash, commitLetter, addTapeSymbol, postKeystroke]);
+
+  const inGame = session !== null && roomState === "PLAYING";
+
+  // Close socket and stop the letter timer on unmount
+  useEffect(
+    () => () => {
+      socketRef.current?.close();
+      clearLetterTimer();
+    },
+    [clearLetterTimer]
+  );
 
   // --- 2-Button action dispatch ---------------------------------------------
 
   const handleEnterAction = useCallback(() => {
     if (Date.now() - lastBackTimeRef.current < 600) return;
+    if (inGame) {
+      handleGameChord(); // keyboard Enter/Space acts like pressing both buttons
+      return;
+    }
     sound.playMenu(isMuted);
     triggerFlash(140);
 
@@ -378,9 +474,6 @@ export default function App() {
     if (session) {
       if (roomState === "WAITING") {
         void readyUp();
-      } else if (roomState === "PLAYING") {
-        // Both buttons together ends the current letter.
-        void sendKeystroke(" ");
       }
       return;
     }
@@ -423,7 +516,8 @@ export default function App() {
     createRoom,
     deliverMorseMessage,
     readyUp,
-    sendKeystroke,
+    inGame,
+    handleGameChord,
   ]);
 
   const handleBackAction = useCallback(() => {
@@ -470,7 +564,7 @@ export default function App() {
 
     if (session) {
       if (roomState === "PLAYING") {
-        void sendKeystroke(".");
+        typeSymbol(".");
       } else if (roomState === "WAITING") {
         triggerFlash(90);
         sound.playMenu(isMuted);
@@ -491,7 +585,7 @@ export default function App() {
 
     sound.playMenu(isMuted);
     setSelectedIndex((prev) => (prev > 0 ? prev - 1 : MENU_OPTIONS.length - 1));
-  }, [showSettingsModal, showRefModal, session, roomState, isJoining, joinCode.length, isMuted, triggerFlash, sendKeystroke, addTapeSymbol]);
+  }, [showSettingsModal, showRefModal, session, roomState, isJoining, joinCode.length, isMuted, triggerFlash, typeSymbol, addTapeSymbol]);
 
   const handleRightAction = useCallback(() => {
     if (Date.now() - lastBackTimeRef.current < 600) return;
@@ -508,7 +602,7 @@ export default function App() {
 
     if (session) {
       if (roomState === "PLAYING") {
-        void sendKeystroke("-");
+        typeSymbol("-");
       } else if (roomState === "WAITING") {
         triggerFlash(240);
         sound.playMenu(isMuted);
@@ -529,7 +623,7 @@ export default function App() {
 
     sound.playMenu(isMuted);
     setSelectedIndex((prev) => (prev < MENU_OPTIONS.length - 1 ? prev + 1 : 0));
-  }, [showSettingsModal, showRefModal, session, roomState, isJoining, joinCode.length, isMuted, triggerFlash, sendKeystroke, addTapeSymbol]);
+  }, [showSettingsModal, showRefModal, session, roomState, isJoining, joinCode.length, isMuted, triggerFlash, typeSymbol, addTapeSymbol]);
 
   const onChordPress = useCallback(() => {
     chordActiveRef.current = true;
@@ -538,6 +632,12 @@ export default function App() {
     if (chordRegisteredRef.current) return; // already counted this simultaneous press
 
     chordRegisteredRef.current = true;
+
+    if (inGame) {
+      // In game a chord acts immediately (no ENTER/BACK wait); a double chord is a space.
+      handleGameChord();
+      return;
+    }
 
     if (pendingChordTimerRef.current !== null) {
       // Second chord arrived before the enter timer fired -> BACK
@@ -563,17 +663,25 @@ export default function App() {
       }
     }, 250) as unknown as number;
     lastChordTimeRef.current = now;
-  }, [handleBackAction, handleEnterAction]);
+  }, [handleBackAction, handleEnterAction, inGame, handleGameChord]);
+
+  // Menus accept a sloppy chord (second press within 160ms); in game both must be held,
+  // otherwise a quick dash-then-dot would end the letter.
+  const isChordWith = useCallback(
+    (otherDown: boolean, otherLastDown: number) =>
+      otherDown || (!inGame && Date.now() - otherLastDown < 160),
+    [inGame]
+  );
 
   const handleDotPointerDown = useCallback(() => {
     isLeftDownRef.current = true;
     lastLeftDownTimeRef.current = Date.now();
     setIsDotPadVisual(true);
 
-    if (isRightDownRef.current || Date.now() - lastRightDownTimeRef.current < 160) {
+    if (isChordWith(isRightDownRef.current, lastRightDownTimeRef.current)) {
       onChordPress();
     }
-  }, [onChordPress]);
+  }, [onChordPress, isChordWith]);
 
   const handleDotPointerUp = useCallback(() => {
     isLeftDownRef.current = false;
@@ -600,10 +708,10 @@ export default function App() {
     lastRightDownTimeRef.current = Date.now();
     setIsDashPadVisual(true);
 
-    if (isLeftDownRef.current || Date.now() - lastLeftDownTimeRef.current < 160) {
+    if (isChordWith(isLeftDownRef.current, lastLeftDownTimeRef.current)) {
       onChordPress();
     }
-  }, [onChordPress]);
+  }, [onChordPress, isChordWith]);
 
   const handleDashPointerUp = useCallback(() => {
     isRightDownRef.current = false;
@@ -715,6 +823,7 @@ export default function App() {
           roomState={roomState}
           socketStatus={socketStatus}
           typed={typed}
+          opponentTyped={opponentTyped}
           events={events}
           isReady={isReady}
           isReadying={isReadying}
@@ -722,7 +831,7 @@ export default function App() {
           onLog={log}
           onLeave={leaveRoom}
           onReady={readyUp}
-          onSendSignal={sendKeystroke}
+          onSendSignal={typeSymbol}
         />
       ) : (
         <Lobby

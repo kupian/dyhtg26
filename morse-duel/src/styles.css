@@ -13,6 +13,7 @@
   --wrong: #ca4754;
   --wrong-glow: rgba(202, 71, 84, 0.4);
   --success: #67a339;
+  --opponent: #38bdf8; /* matches .flashlight.active-opponent */
   --tap: 44px; /* minimum touch target (Apple HIG) */
   --dim-item: #18191b; /* darker than #323437 for unselected dim terminal text */
 }
@@ -1061,4 +1062,12 @@ button:disabled {
 .typed-ascii {
   overflow-wrap: anywhere;
   white-space: pre-wrap;
+}
+
+.transmission-display.opponent {
+  border-left-color: var(--opponent);
+}
+
+.transmission-display.opponent .morse-stream {
+  color: var(--opponent);
 }

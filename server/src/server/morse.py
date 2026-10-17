@@ -54,6 +54,8 @@ def encode_sentence(ascii_sentence: str) -> str:
 def decode_sentence(morse_sentence: str) -> str:
     final_sentence = ""
     for character in morse_sentence.split("NEWCHAR"):
+        if not character:
+            continue
         try:
             final_sentence += decode[character]
         except KeyError as e:

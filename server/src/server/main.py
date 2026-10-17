@@ -80,14 +80,14 @@ def sentence(body: SentenceRequest) -> SentenceResponse:
     summary="Send a keystroke to an active room",
     responses={409: {"model": ErrorResponse, "description": "Error sending keystroke"}}
 )
-def keystroke(body: KeystrokeRequest) -> KeystrokeResponse:
+async def keystroke(body: KeystrokeRequest) -> KeystrokeResponse:
     # get player's next correct key
     room = gm.get_room(body.room_code)
     if room.room_state != RoomState.PLAYING:
         raise RoomError("Room is not playing")
 
     player = room.get_player(body.player_id)
-    player.type_character(body.symbol)
+    await room.type_character(body.player_id, body.symbol)
 
     return KeystrokeResponse(
         current_sentence_ascii=player.get_typed_ascii(),

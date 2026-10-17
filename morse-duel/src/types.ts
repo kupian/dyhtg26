@@ -35,10 +35,18 @@ export type RoomState = "WAITING" | "PLAYING" | "FINISHED";
 /** Broadcast on the game socket by ConnectionManager.notify_state_change_all. */
 export type StateChangeMessage = { state: RoomState };
 
+/** Sent on the game socket when the opponent types (ConnectionManager.update_opponents_sentence). */
+export type OpponentTypedMessage = { opponent_morse: string; opponent_ascii: string };
+
 export type SocketStatus = "connecting" | "open" | "closed";
 
-/** Dot, dash, or " " to end the current letter. */
-export type KeySymbol = "." | "-" | " ";
+export type KeySymbol = "." | "-";
+
+/** Ends the current letter. Must match the separator in server decode_sentence (morse.py). */
+export const NEWCHAR = "NEWCHAR";
+
+/** Anything sent to /keystroke: a dot/dash, a letter break, or " " (a space, as its own letter). */
+export type WireSymbol = KeySymbol | " " | typeof NEWCHAR;
 
 export type LogEntry = { id: number; time: string; text: string };
 
@@ -53,6 +61,7 @@ export interface RoomProps {
   roomState: RoomState;
   socketStatus: SocketStatus;
   typed: TypedMessage;
+  opponentTyped: TypedMessage;
   events: LogEntry[];
   isReady: boolean;
   isReadying: boolean;

@@ -1,4 +1,4 @@
-import type { KeySymbol, RoomCode } from "./types";
+import type { RoomCode, WireSymbol } from "./types";
 
 // --- Module scope: created once, not on every render -------------------------
 // Default to port 8000 on whatever host served the page, so a phone loading
@@ -79,7 +79,7 @@ export const getSentence = (roomCode: RoomCode) =>
   postJSON<SentenceResponse>("/sentence", { room_code: roomCode });
 
 /** Send one dot/dash. The server owns the typed sentence and returns its current state. */
-export const sendKeystroke = (roomCode: RoomCode, playerId: string, symbol: KeySymbol) =>
+export const sendKeystroke = (roomCode: RoomCode, playerId: string, symbol: WireSymbol) =>
   postJSON<KeystrokeResponse>("/keystroke", { room_code: roomCode, player_id: playerId, symbol });
 
 /** Open the per-player game socket. The server broadcasts room state changes on it. */

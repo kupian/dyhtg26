@@ -1,4 +1,29 @@
-import type { RoomProps } from "../types";
+import type { RoomProps, TypedMessage } from "../types";
+import { NEWCHAR } from "../types";
+
+/** Server morse is letters joined by NEWCHAR, with " " as a space; show it as ".... .. / .-" */
+function formatMorse(raw: string): string {
+  return raw
+    .split(NEWCHAR)
+    .filter((letter) => letter !== "")
+    .map((letter) => (letter === " " ? "/" : letter))
+    .join(" ");
+}
+
+function TypedDisplay({ label, typed, isOpponent = false }: { label: string; typed: TypedMessage; isOpponent?: boolean }) {
+  return (
+    <>
+      <div className="duel-track-header">
+        <span>{label}</span>
+        <span>{typed.ascii.length} CHARS</span>
+      </div>
+      <div className={`transmission-display ${isOpponent ? "opponent" : ""}`}>
+        <span className="decoded-stream typed-ascii">{typed.ascii || "_"}</span>
+        <span className="morse-stream typed-morse">{formatMorse(typed.morse)}</span>
+      </div>
+    </>
+  );
+}
 
 export default function Room({
   roomCode,
@@ -7,6 +32,7 @@ export default function Room({
   roomState,
   socketStatus,
   typed,
+  opponentTyped,
   events,
   isReady,
   isReadying,
@@ -69,17 +95,11 @@ export default function Room({
 
       {roomState === "PLAYING" && (
         <div className="duel-track">
-          <div className="duel-track-header">
-            <span>YOUR MESSAGE</span>
-            <span>{typed.ascii.length} CHARS</span>
-          </div>
-          <div className="transmission-display">
-            <span className="decoded-stream typed-ascii">{typed.ascii || "_"}</span>
-            <span className="morse-stream typed-morse">{typed.morse}</span>
-          </div>
+          <TypedDisplay label="OPPONENT" typed={opponentTyped} isOpponent />
+          <TypedDisplay label="YOU" typed={typed} />
 
           <p className="hint" style={{ textAlign: "center" }}>
-            Tap DOT / DASH or press . / - · Both together = letter space
+            Pause 1s or press BOTH to finish a letter · BOTH twice for a space
           </p>
         </div>
       )}
