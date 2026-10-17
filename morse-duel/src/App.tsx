@@ -30,6 +30,10 @@ const LETTER_IDLE_MS = 1000;
 // ...or by a chord (both buttons). Two chords within this window add a space.
 const DOUBLE_CHORD_MS = 500;
 
+// Room codes are 4 dots/dashes (ROOM_CODES in server/src/server/game.py)
+const ROOM_CODE_LENGTH = 4;
+const JOIN_INVALID_FLASH_MS = 700;
+
 const MENU_OPTIONS = [
   { id: "create", label: "CREATE GAME" },
   { id: "join", label: "JOIN GAME" },
@@ -72,6 +76,8 @@ export default function App() {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [isJoining, setIsJoining] = useState(false);
   const [joinCode, setJoinCode] = useState("");
+  // A rejected code is shown red briefly, then cleared for another attempt.
+  const [isJoinCodeInvalid, setIsJoinCodeInvalid] = useState(false);
   const [showRefModal, setShowRefModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
 
@@ -328,11 +334,33 @@ export default function App() {
         console.error("joinRoom failed", err);
         setError(api.describeError(err));
         sound.playError(isMuted);
+        setIsJoinCodeInvalid(true);
+        window.setTimeout(() => {
+          setIsJoinCodeInvalid(false);
+          setJoinCode("");
+        }, JOIN_INVALID_FLASH_MS);
       } finally {
         setIsLoading(false);
       }
     },
     [isLoading, enterRoom, deliverMorseMessage, log, isMuted]
+  );
+
+  /** Add a dot/dash to the join code; the 4th symbol submits it. */
+  const typeJoinSymbol = useCallback(
+    (symbol: KeySymbol) => {
+      if (joinCode.length >= ROOM_CODE_LENGTH) return; // joining, or showing a rejected code
+      triggerFlash(symbol === "." ? 90 : 240);
+      if (symbol === ".") sound.playDot(isMuted);
+      else sound.playDash(isMuted);
+      addTapeSymbol(symbol);
+      setError(null);
+
+      const next = joinCode + symbol;
+      setJoinCode(next);
+      if (next.length === ROOM_CODE_LENGTH) void joinRoom(next as RoomCode);
+    },
+    [joinCode, triggerFlash, isMuted, addTapeSymbol, joinRoom]
   );
 
   const leaveRoom = useCallback(() => {
@@ -479,9 +507,8 @@ export default function App() {
     }
 
     if (isJoining) {
-      if (joinCode.length === 4) {
-        void joinRoom(joinCode as RoomCode);
-      } else {
+      // A full code submits itself (typeJoinSymbol); ENTER only prompts for the rest.
+      if (joinCode.length < ROOM_CODE_LENGTH) {
         sound.playError(isMuted);
         deliverMorseMessage("ENTER 4 SIGNALS");
       }
@@ -512,7 +539,6 @@ export default function App() {
     selectedIndex,
     isMuted,
     triggerFlash,
-    joinRoom,
     createRoom,
     deliverMorseMessage,
     readyUp,
@@ -573,19 +599,13 @@ export default function App() {
     }
 
     if (isJoining) {
-      if (joinCode.length < 4) {
-        triggerFlash(90);
-        sound.playDot(isMuted);
-        setJoinCode((prev) => prev + ".");
-        addTapeSymbol(".");
-        setError(null);
-      }
+      typeJoinSymbol(".");
       return;
     }
 
-    sound.playMenu(isMuted);
-    setSelectedIndex((prev) => (prev > 0 ? prev - 1 : MENU_OPTIONS.length - 1));
-  }, [showSettingsModal, showRefModal, session, roomState, isJoining, joinCode.length, isMuted, triggerFlash, typeSymbol, addTapeSymbol]);
+    // Main menu: left selects the highlighted option (right cycles through them)
+    handleEnterAction();
+  }, [showSettingsModal, showRefModal, session, roomState, isJoining, isMuted, triggerFlash, typeSymbol, typeJoinSymbol, handleEnterAction]);
 
   const handleRightAction = useCallback(() => {
     if (Date.now() - lastBackTimeRef.current < 600) return;
@@ -611,19 +631,14 @@ export default function App() {
     }
 
     if (isJoining) {
-      if (joinCode.length < 4) {
-        triggerFlash(240);
-        sound.playDash(isMuted);
-        setJoinCode((prev) => prev + "-");
-        addTapeSymbol("-");
-        setError(null);
-      }
+      typeJoinSymbol("-");
       return;
     }
 
+    // Main menu: right cycles to the next option, wrapping to the top
     sound.playMenu(isMuted);
     setSelectedIndex((prev) => (prev < MENU_OPTIONS.length - 1 ? prev + 1 : 0));
-  }, [showSettingsModal, showRefModal, session, roomState, isJoining, joinCode.length, isMuted, triggerFlash, typeSymbol, addTapeSymbol]);
+  }, [showSettingsModal, showRefModal, session, roomState, isJoining, isMuted, triggerFlash, typeSymbol, typeJoinSymbol]);
 
   const onChordPress = useCallback(() => {
     chordActiveRef.current = true;
@@ -847,6 +862,7 @@ export default function App() {
           isJoining={isJoining}
           onToggleJoining={setIsJoining}
           joinCode={joinCode}
+          isJoinCodeInvalid={isJoinCodeInvalid}
           onJoinCodeChange={setJoinCode}
           showRefModal={showRefModal}
           onToggleRefModal={setShowRefModal}

@@ -13,6 +13,8 @@ export type LobbyProps = {
   isJoining?: boolean;
   onToggleJoining?: (joining: boolean) => void;
   joinCode?: string;
+  /** The server rejected joinCode; shown red until it is cleared. */
+  isJoinCodeInvalid?: boolean;
   onJoinCodeChange?: (code: string) => void;
   showRefModal?: boolean;
   onToggleRefModal?: (show: boolean) => void;
