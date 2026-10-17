@@ -42,7 +42,6 @@ class Letter:
 
     def as_morse(self):
         return self.morse
-
 class Word:
     def __init__(self, ascii_str: str):
         self.letters = [Letter(c) for c in ascii_str]
@@ -113,12 +112,14 @@ class GameManager():
         self.rooms[room_code] = r
         return room_code
 
-    def get_room(self, room_code: str) -> Room | None:
-        return self.rooms.get(room_code, None)
+    def get_room(self, room_code: str) -> Room:
+        room = self.rooms.get(room_code)
+        if not room:
+            raise GameError("Room does not exist")
+        return room
 
     def join_room(self, room_code: str) -> UUID:
         room = self.get_room(room_code)
         if not room:
             raise GameError("Room does not exist")
-
         return room.add_player()
