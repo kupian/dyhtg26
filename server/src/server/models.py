@@ -7,4 +7,4 @@ class JoinRoomResponse(BaseModel):
     player_id: UUID
 
 class ErrorResponse(BaseModel):
-    detail: str
+    error: str

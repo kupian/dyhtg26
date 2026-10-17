@@ -9,7 +9,7 @@ gm = GameManager()
 
 @app.exception_handler(GameError)
 async def game_error_handler(request: Request, exc: GameError):
-    return JSONResponse(status_code=409, content={"detail": str(exc)})
+    return JSONResponse(status_code=409, content={"error": str(exc)})
 
 @app.get("/")
 def read_root():
