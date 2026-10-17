@@ -45,8 +45,8 @@ def join_room(body: JoinRoomRequest) -> JoinRoomResponse:
     responses={409: {"model": ErrorResponse, "description": "Error readying up player"}}
 )
 def ready(body: ReadyRequest) -> ReadyResponse:
-    player = gm.get_room(body.room_code).get_player(body.player_id)
-    player.set_ready()
+    room = gm.get_room(body.room_code)
+    room.set_player_ready(body.player_id)
     return ReadyResponse(message=f"Room {body.room_code}: {body.player_id} set to ready")
 
 @app.post(

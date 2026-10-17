@@ -110,19 +110,19 @@ class Room:
             raise RoomError("Player does not exist")
         return player
 
-    def set_player_ready(self, player_id: UUID):
+    async def set_player_ready(self, player_id: UUID):
         self.get_player(player_id).set_ready()
         if all([player.ready for player in self.players.values()]):
-            self.start_room()
+            await self.start_room()
 
     def get_player_count(self):
         return len(self.players)
 
-    def start_room(self):
+    async def start_room(self):
         if self.room_state == RoomState.WAITING:
             self.room_state = RoomState.PLAYING
             self.generate_new_sentence()
-            _ = self.connections.notify_state_change_all(self.room_state)
+            await self.connections.notify_state_change_all(self.room_state)
         else:
             raise RoomError("Room cannot be started now")
 
