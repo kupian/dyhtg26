@@ -3,11 +3,25 @@ from fastapi.responses import JSONResponse
 from server.game import GameManager, Room
 from server.models import CreateRoomResponse, ErrorResponse, JoinRoomResponse, ReadyResponse
 from server.exceptions import GameError, RoomError, PlayerError
+from fastapi.middleware.cors import CORSMiddleware
 from server.sockets import ConnectionManager
 from uuid import UUID
 
 app = FastAPI()
 gm = GameManager()
+
+origins = [
+    "http://localhost:8080",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 @app.exception_handler(GameError)
 async def game_error_handler(request: Request, exc: GameError):
