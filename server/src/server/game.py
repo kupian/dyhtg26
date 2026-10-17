@@ -2,6 +2,8 @@ from math import log2, ceil
 from uuid import UUID, uuid4
 from server.exceptions import RoomError, GameError, PlayerError
 import server.morse as morse
+from server.sockets import ConnectionManager
+from enum import Enum
 
 """
 MAGIC NUMBERS
@@ -72,12 +74,18 @@ class Player:
         else:
             raise PlayerError("Player is already ready")
 
+class RoomState(Enum):
+    WAITING = "WAITING"
+    PLAYING = "PLAYING"
+    FINISHED = "FINISHED"
 class Room:
     max_players = 2
 
     def __init__(self, code):
         self.code = code
         self.players = {}
+        self.connections = ConnectionManager()
+        self.room_state = RoomState.WAITING
 
     def add_player(self) -> UUID:
         if len(self.players) < self.max_players:
@@ -95,9 +103,18 @@ class Room:
 
     def set_player_ready(self, player_id):
         self.get_player(player_id).set_ready()
+        if all([player.ready for player in self.players]):
+            self.start_room()
 
     def get_player_count(self):
         return len(self.players)
+
+    def start_room(self):
+        if self.room_state == RoomState.WAITING:
+            self.room_state = RoomState.PLAYING
+            _ = self.connections.notify_state_change_all(self.room_state)
+        else:
+            raise RoomError("Room cannot be started now")
 
 class GameManager():
     def __init__(self):

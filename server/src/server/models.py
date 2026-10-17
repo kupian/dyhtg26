@@ -6,5 +6,8 @@ class CreateRoomResponse(BaseModel):
 class JoinRoomResponse(BaseModel):
     player_id: UUID
 
+class ReadyResponse(BaseModel):
+    message: str
+
 class ErrorResponse(BaseModel):
     error: str
