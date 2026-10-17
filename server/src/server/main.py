@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from server.game import GameManager, Room
-from server.models import CreateRoomResponse, ErrorResponse, JoinRoomRequest, JoinRoomResponse, ReadyRequest, ReadyResponse, SentenceRequest, SentenceResponse
+from server.models import *
 from server.exceptions import GameError, RoomError, PlayerError
 from server.sockets import ConnectionManager
 from uuid import UUID
@@ -44,9 +44,9 @@ def join_room(body: JoinRoomRequest) -> JoinRoomResponse:
     summary="Set a player as ready to start the game",
     responses={409: {"model": ErrorResponse, "description": "Error readying up player"}}
 )
-def ready(body: ReadyRequest) -> ReadyResponse:
+async def ready(body: ReadyRequest) -> ReadyResponse:
     room = gm.get_room(body.room_code)
-    room.set_player_ready(body.player_id)
+    await room.set_player_ready(body.player_id)
     return ReadyResponse(message=f"Room {body.room_code}: {body.player_id} set to ready")
 
 @app.post(
@@ -57,6 +57,38 @@ def ready(body: ReadyRequest) -> ReadyResponse:
 def sentence(body: SentenceRequest) -> SentenceResponse:
     sentence = gm.get_room(body.room_code).get_sentence()
     return SentenceResponse(sentence=sentence.as_ascii())
+
+@app.post(
+    "/keystroke",
+    summary="Send a keystroke to an active room",
+    responses={409: {"model": ErrorResponse, "description": "Error sending keystroke"}}
+)
+def keystroke(body: KeystrokeRequest) -> KeystrokeResponse:
+    # get player's next correct key
+    player = gm.get_room(body.room_code).get_player(body.player_id)
+
+    """
+    if player.next_correct_keystroke == body.symbol:
+        player.advance_next_keystroke()
+        correct = True
+    else:
+        correct = False
+    """
+    #! TEMPORARY FOR TESTING ----
+    correct=True
+    player.type_character(body.symbol)
+
+    #! ------
+    target_character = player.get_target_character()
+    typed_sentence = player.get_typed_sentence()
+
+
+    return KeystrokeResponse(
+        correct=correct,
+        current_sentence_ascii=typed_sentence.as_ascii(),
+        current_sentence_morse=typed_sentence.as_morse(),
+        current_target_character=target_character.as_ascii()
+    )
 
 @app.websocket("/game/{room_code}/{player_id}")
 async def websocket_endpoint(websocket: WebSocket, room_code: str, player_id: str):

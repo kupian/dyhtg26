@@ -28,5 +28,15 @@ class SentenceRequest(BaseModel):
 class SentenceResponse(BaseModel):
     sentence: str
 
+class KeystrokeRequest(BaseModel):
+    room_code: str
+    player_id: UUID
+    symbol: str
+
+class KeystrokeResponse(BaseModel):
+    correct: bool
+    current_sentence_ascii: str
+    current_sentence_morse: str
+    current_target_character: str
 class ErrorResponse(BaseModel):
     error: str
