@@ -1,5 +1,10 @@
 from pydantic import BaseModel
 from uuid import UUID
+from enum import Enum
+class RoomState(Enum):
+    WAITING = "WAITING"
+    PLAYING = "PLAYING"
+    FINISHED = "FINISHED"
 class CreateRoomResponse(BaseModel):
     room_code: str
     player_id: UUID

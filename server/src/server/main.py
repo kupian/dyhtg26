@@ -38,7 +38,6 @@ def join_room(room_code: str) -> JoinRoomResponse:
     """Joins a room and returns the player's generated ID"""
     return JoinRoomResponse(player_id=gm.join_room(room_code))
 
-
 @app.post(
     "/ready",
     summary="Set a player as ready to start the game",
@@ -62,10 +61,10 @@ async def websocket_endpoint(websocket: WebSocket, room_code: str, player_id: st
         await websocket.close(code=1008, reason=reason)
         return
 
-    await room.connections.connect(websocket, player)
+    await room.connections.connect(websocket, player_uuid)
     try:
         while True:
             data = await websocket.receive_text()
             # TODO: handle message
     except WebSocketDisconnect:
-        room.connections.disconnect(player)
+        room.connections.disconnect(player_uuid)
