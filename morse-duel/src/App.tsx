@@ -1,4 +1,10 @@
-import { useState, useEffect, useRef, useCallback, type CSSProperties } from "react";
+import {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  type CSSProperties,
+} from "react";
 import type {
   KeySymbol,
   OpponentTypedMessage,
@@ -28,7 +34,12 @@ import Lobby from "./component/Lobby";
 import Room from "./component/Room";
 import Practice from "./component/Practice";
 
-type Session = { roomCode: RoomCode; playerId: string; isHost: boolean; mode: RoomMode };
+type Session = {
+  roomCode: RoomCode;
+  playerId: string;
+  isHost: boolean;
+  mode: RoomMode;
+};
 
 // In-game typing: a letter is finished by holding its last stroke for the "letter hold"
 // time (a setting), or after this long with no dot/dash. Both buttons together is a space.
@@ -45,8 +56,10 @@ const DASH_FLASH_MS = 360;
 const ROOM_CODE_LENGTH = 4;
 const JOIN_INVALID_FLASH_MS = 700;
 
-const isDotKey = (key: string) => key === "." || key === "z" || key === "Z" || key === "ArrowLeft";
-const isDashKey = (key: string) => key === "-" || key === "x" || key === "X" || key === "ArrowRight";
+const isDotKey = (key: string) =>
+  key === "." || key === "z" || key === "Z" || key === "ArrowLeft";
+const isDashKey = (key: string) =>
+  key === "-" || key === "x" || key === "X" || key === "ArrowRight";
 
 export default function App() {
   // --- Backend / session state ----------------------------------------------
@@ -98,8 +111,15 @@ export default function App() {
   const holdTimerRef = useRef<number | null>(null);
   const holdShowTimerRef = useRef<number | null>(null);
   // A dot/dash held down while typing: once held for letterHoldMs it is sent and ends the letter.
-  const strokeHoldRef = useRef<{ side: "left" | "right"; timer: number; fired: boolean } | null>(null);
-  const signalTimersRef = useRef<{ you: number | null; opponent: number | null }>({ you: null, opponent: null });
+  const strokeHoldRef = useRef<{
+    side: "left" | "right";
+    timer: number;
+    fired: boolean;
+  } | null>(null);
+  const signalTimersRef = useRef<{
+    you: number | null;
+    opponent: number | null;
+  }>({ you: null, opponent: null });
 
   const flashTimerRef = useRef<number | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
@@ -116,10 +136,10 @@ export default function App() {
     console.debug(`[morse-duel] ${text}`);
   }, []);
 
-
   /** Light the bulb for one button press (menus and lobby only). */
   const triggerFlash = useCallback((durationMs: number) => {
-    if (flashTimerRef.current !== null) window.clearTimeout(flashTimerRef.current);
+    if (flashTimerRef.current !== null)
+      window.clearTimeout(flashTimerRef.current);
     setIsFlashlightOn(true);
     flashTimerRef.current = window.setTimeout(() => {
       flashTimerRef.current = null;
@@ -128,16 +148,22 @@ export default function App() {
   }, []);
 
   /** Light a player's cursor for one dot or dash; it switches off instantly. */
-  const flashSignal = useCallback((who: "you" | "opponent", symbol: KeySymbol) => {
-    const setOn = who === "you" ? setIsYouSignalOn : setIsOpponentSignalOn;
-    const timers = signalTimersRef.current;
-    if (timers[who] !== null) window.clearTimeout(timers[who]);
-    setOn(true);
-    timers[who] = window.setTimeout(() => {
-      timers[who] = null;
-      setOn(false);
-    }, symbol === "." ? DOT_FLASH_MS : DASH_FLASH_MS);
-  }, []);
+  const flashSignal = useCallback(
+    (who: "you" | "opponent", symbol: KeySymbol) => {
+      const setOn = who === "you" ? setIsYouSignalOn : setIsOpponentSignalOn;
+      const timers = signalTimersRef.current;
+      if (timers[who] !== null) window.clearTimeout(timers[who]);
+      setOn(true);
+      timers[who] = window.setTimeout(
+        () => {
+          timers[who] = null;
+          setOn(false);
+        },
+        symbol === "." ? DOT_FLASH_MS : DASH_FLASH_MS,
+      );
+    },
+    [],
+  );
 
   const clearLetterTimer = useCallback(() => {
     if (letterTimerRef.current !== null) {
@@ -160,7 +186,8 @@ export default function App() {
     setOpponentTyped(EMPTY_TYPED);
   }, [clearLetterTimer, cancelStrokeHold]);
 
-  const displayTitle: TitleKey = session?.mode ?? (isInPractice ? "practice" : titleKey);
+  const displayTitle: TitleKey =
+    session?.mode ?? (isInPractice ? "practice" : titleKey);
 
   useEffect(() => {
     const word = TITLE_WORD[displayTitle];
@@ -188,7 +215,10 @@ export default function App() {
         if (!isCurrent()) return;
         log(`← WS ${ev.data}`);
 
-        let msg: StateChangeMessage | OpponentTypedMessage | Record<string, unknown>;
+        let msg:
+          | StateChangeMessage
+          | OpponentTypedMessage
+          | Record<string, unknown>;
         try {
           msg = JSON.parse(ev.data);
         } catch {
@@ -205,7 +235,10 @@ export default function App() {
           typeof msg.opponent_morse === "string" &&
           typeof msg.opponent_ascii === "string"
         ) {
-          setOpponentTyped({ ascii: msg.opponent_ascii, morse: msg.opponent_morse });
+          setOpponentTyped({
+            ascii: msg.opponent_ascii,
+            morse: msg.opponent_morse,
+          });
 
           // Flash/beep the opponent's dot or dash (not their NEWCHAR or space)
           const sym = msg.opponent_morse.slice(-1);
@@ -223,7 +256,7 @@ export default function App() {
         log(`← WS closed (${ev.code}${ev.reason ? `: ${ev.reason}` : ""})`);
       };
     },
-    [log, flashSignal, isMuted]
+    [log, flashSignal, isMuted],
   );
 
   const enterRoom = useCallback(
@@ -238,7 +271,7 @@ export default function App() {
       setIsReadying(false);
       connect(roomCode, playerId);
     },
-    [connect, resetTyping]
+    [connect, resetTyping],
   );
 
   const createRoom = useCallback(
@@ -253,13 +286,17 @@ export default function App() {
         sound.playMenu(isMuted);
       } catch (err) {
         console.error("createRoom failed", err);
-        setError(api.isUnreachable(err) ? "CAN'T REACH THE SERVER" : "COULDN'T CREATE A ROOM");
+        setError(
+          api.isUnreachable(err)
+            ? "CAN'T REACH THE SERVER"
+            : "COULDN'T CREATE A ROOM",
+        );
         sound.playError(isMuted);
       } finally {
         setIsLoading(false);
       }
     },
-    [isLoading, enterRoom, log, isMuted]
+    [isLoading, enterRoom, log, isMuted],
   );
 
   const joinRoom = useCallback(
@@ -276,7 +313,11 @@ export default function App() {
         sound.playMenu(isMuted);
       } catch (err) {
         console.error("joinRoom failed", err);
-        setError(api.isUnreachable(err) ? "CAN'T REACH THE SERVER" : "COULDN'T JOIN THAT ROOM");
+        setError(
+          api.isUnreachable(err)
+            ? "CAN'T REACH THE SERVER"
+            : "COULDN'T JOIN THAT ROOM",
+        );
         sound.playError(isMuted);
         setIsJoinCodeInvalid(true);
         window.setTimeout(() => {
@@ -287,7 +328,7 @@ export default function App() {
         setIsLoading(false);
       }
     },
-    [isLoading, enterRoom, log, isMuted]
+    [isLoading, enterRoom, log, isMuted],
   );
 
   /** Add a dot/dash to the join code; the 4th symbol submits it. */
@@ -302,9 +343,10 @@ export default function App() {
 
       const next = joinCode + symbol;
       setJoinCode(next);
-      if (next.length === ROOM_CODE_LENGTH) void joinRoom(next as RoomCode, mode);
+      if (next.length === ROOM_CODE_LENGTH)
+        void joinRoom(next as RoomCode, mode);
     },
-    [menuIndex, joinCode, isMuted, joinRoom]
+    [menuIndex, joinCode, isMuted, joinRoom],
   );
 
   const leaveRoom = useCallback(() => {
@@ -358,13 +400,16 @@ export default function App() {
           const data = await api.sendKeystroke(roomCode, playerId, symbol);
           if (gen !== keystrokeGenRef.current) return;
           log(`← keystroke: ${JSON.stringify(data)}`);
-          setTyped({ ascii: data.current_sentence_ascii, morse: data.current_sentence_morse });
+          setTyped({
+            ascii: data.current_sentence_ascii,
+            morse: data.current_sentence_morse,
+          });
         } catch (err) {
           log(`✗ /keystroke: ${api.describeError(err)}`);
         }
       });
     },
-    [session, log]
+    [session, log],
   );
 
   /** Send a symbol to the server, or in practice mode decode it locally. */
@@ -379,7 +424,7 @@ export default function App() {
       }
       postKeystroke(symbol);
     },
-    [isInPractice, postKeystroke]
+    [isInPractice, postKeystroke],
   );
 
   /** End the letter in progress, if any. */
@@ -401,7 +446,7 @@ export default function App() {
       clearLetterTimer();
       letterTimerRef.current = window.setTimeout(commitLetter, LETTER_IDLE_MS);
     },
-    [flashSignal, isMuted, emitSymbol, clearLetterTimer, commitLetter]
+    [flashSignal, isMuted, emitSymbol, clearLetterTimer, commitLetter],
   );
 
   /** Both buttons together: finish any letter in progress, then a space. */
@@ -425,7 +470,13 @@ export default function App() {
       }, letterHoldMs);
       strokeHoldRef.current = hold;
     },
-    [cancelStrokeHold, clearLetterTimer, typeSymbol, commitLetter, letterHoldMs]
+    [
+      cancelStrokeHold,
+      clearLetterTimer,
+      typeSymbol,
+      commitLetter,
+      letterHoldMs,
+    ],
   );
 
   const enterPractice = useCallback(() => {
@@ -439,7 +490,8 @@ export default function App() {
     sound.playMenu(isMuted);
   }, [resetTyping, isMuted]);
 
-  const isTyping = isInPractice || (session !== null && roomState === "PLAYING");
+  const isTyping =
+    isInPractice || (session !== null && roomState === "PLAYING");
 
   // --- Hold both to leave -----------------------------------------------------
 
@@ -464,7 +516,7 @@ export default function App() {
         onExit();
       }, HOLD_EXIT_MS);
     },
-    [cancelHoldExit]
+    [cancelHoldExit],
   );
 
   // Close socket and stop timers on unmount
@@ -477,9 +529,10 @@ export default function App() {
       const timers = signalTimersRef.current;
       if (timers.you !== null) window.clearTimeout(timers.you);
       if (timers.opponent !== null) window.clearTimeout(timers.opponent);
-      if (flashTimerRef.current !== null) window.clearTimeout(flashTimerRef.current);
+      if (flashTimerRef.current !== null)
+        window.clearTimeout(flashTimerRef.current);
     },
-    [clearLetterTimer, cancelStrokeHold, cancelHoldExit]
+    [clearLetterTimer, cancelStrokeHold, cancelHoldExit],
   );
 
   // --- Menu actions -------------------------------------------------------------
@@ -501,14 +554,14 @@ export default function App() {
         setSubIndex(0);
       } else if (item.id === "practice") {
         enterPractice();
-      } else if (item.id === "chart") {
+      } else if (item.id === "learn") {
         setShowChart(true);
       } else if (item.id === "settings") {
         setSettingsIndex(0);
         setShowSettings(true);
       }
     },
-    [isMuted, enterPractice]
+    [isMuted, enterPractice],
   );
 
   /** CREATE / JOIN under the open mode. */
@@ -526,7 +579,7 @@ export default function App() {
         setError(null);
       }
     },
-    [menuIndex, isMuted, createRoom]
+    [menuIndex, isMuted, createRoom],
   );
 
   const activateSetting = useCallback(
@@ -545,7 +598,7 @@ export default function App() {
         sound.playDash(isMuted);
       }
     },
-    [isMuted, triggerFlash]
+    [isMuted, triggerFlash],
   );
 
   const handleMenuItemClick = useCallback(
@@ -562,7 +615,7 @@ export default function App() {
       highlightMenuItem(index);
       selectTopItem(index);
     },
-    [isExpanded, menuIndex, isMuted, highlightMenuItem, selectTopItem]
+    [isExpanded, menuIndex, isMuted, highlightMenuItem, selectTopItem],
   );
 
   const handleSubItemClick = useCallback(
@@ -570,7 +623,7 @@ export default function App() {
       setSubIndex(index);
       selectSubItem(index);
     },
-    [selectSubItem]
+    [selectSubItem],
   );
 
   const handleSettingClick = useCallback(
@@ -578,7 +631,7 @@ export default function App() {
       setSettingsIndex(index);
       activateSetting(index);
     },
-    [activateSetting]
+    [activateSetting],
   );
 
   // --- 2-Button action dispatch ---------------------------------------------
@@ -605,7 +658,18 @@ export default function App() {
     } else if (isExpanded) {
       setIsExpanded(false);
     }
-  }, [isMuted, triggerFlash, showSettings, showChart, session, leaveRoom, isInPractice, exitPractice, isJoining, isExpanded]);
+  }, [
+    isMuted,
+    triggerFlash,
+    showSettings,
+    showChart,
+    session,
+    leaveRoom,
+    isInPractice,
+    exitPractice,
+    isJoining,
+    isExpanded,
+  ]);
 
   /** Z / left: select (dot while typing). */
   const handleLeftAction = useCallback(() => {
@@ -668,7 +732,20 @@ export default function App() {
       if (isExpanded) setSubIndex((i) => (i + 1) % SUBMENU_ITEMS.length);
       else highlightMenuItem((menuIndex + 1) % MENU_ITEMS.length);
     }
-  }, [isTyping, typeSymbol, triggerFlash, showSettings, isMuted, showChart, session, isJoining, typeJoinSymbol, isExpanded, highlightMenuItem, menuIndex]);
+  }, [
+    isTyping,
+    typeSymbol,
+    triggerFlash,
+    showSettings,
+    isMuted,
+    showChart,
+    session,
+    isJoining,
+    typeJoinSymbol,
+    isExpanded,
+    highlightMenuItem,
+    menuIndex,
+  ]);
 
   /** Keyboard Enter/Space: while typing, Enter ends the letter and Space adds a space; otherwise both act like Z. */
   const handleEnterKey = useCallback(
@@ -680,7 +757,7 @@ export default function App() {
         handleLeftAction();
       }
     },
-    [isTyping, typeSpace, commitLetter, isJoining, handleLeftAction]
+    [isTyping, typeSpace, commitLetter, isJoining, handleLeftAction],
   );
 
   const onChordPress = useCallback(() => {
@@ -694,7 +771,18 @@ export default function App() {
       return;
     }
     handleBackAction();
-  }, [cancelStrokeHold, session, isInPractice, startHoldExit, leaveRoom, exitPractice, isTyping, typeSpace, triggerFlash, handleBackAction]);
+  }, [
+    cancelStrokeHold,
+    session,
+    isInPractice,
+    startHoldExit,
+    leaveRoom,
+    exitPractice,
+    isTyping,
+    typeSpace,
+    triggerFlash,
+    handleBackAction,
+  ]);
 
   /** Release of a tap: returns false if it was a held stroke that already ended the letter. */
   const endStrokeHold = useCallback(
@@ -704,7 +792,7 @@ export default function App() {
       cancelStrokeHold();
       return !hold.fired;
     },
-    [cancelStrokeHold]
+    [cancelStrokeHold],
   );
 
   // Taps act on release; a chord needs both buttons down at once, so quick taps are
@@ -809,19 +897,34 @@ export default function App() {
   let hints: [string, string][];
   let padLabels: [string, string];
   if (isTyping) {
-    hints = [["HOLD STROKE / PAUSE", "END LETTER"], ["BOTH", "SPACE"], ["HOLD BOTH", "LEAVE"]];
+    hints = [
+      ["HOLD STROKE / PAUSE", "END LETTER"],
+      ["BOTH", "SPACE"],
+      ["HOLD BOTH", "LEAVE"],
+    ];
     padLabels = ["DOT", "DASH"];
   } else if (session) {
-    hints = [["Z", "READY"], ["HOLD BOTH", "LEAVE"]];
+    hints = [
+      ["Z", "READY"],
+      ["HOLD BOTH", "LEAVE"],
+    ];
     padLabels = ["READY", ""];
   } else if (showChart) {
     hints = [["BOTH", "BACK"]];
     padLabels = ["", ""];
   } else if (isJoining) {
-    hints = [["Z", "DOT"], ["X", "DASH"], ["BOTH", "BACK"]];
+    hints = [
+      ["Z", "DOT"],
+      ["X", "DASH"],
+      ["BOTH", "BACK"],
+    ];
     padLabels = ["DOT", "DASH"];
   } else {
-    hints = [["Z", "SELECT"], ["X", "NEXT"], ["BOTH", "BACK"]];
+    hints = [
+      ["Z", "SELECT"],
+      ["X", "NEXT"],
+      ["BOTH", "BACK"],
+    ];
     padLabels = ["SELECT", "NEXT"];
   }
 
@@ -836,7 +939,10 @@ export default function App() {
 
       {/* While typing, the cursors flash instead of the bulb */}
       {!isTyping && (
-        <section className="flashlight-container" aria-label="Morse Flashlight Indicator">
+        <section
+          className="flashlight-container"
+          aria-label="Morse Flashlight Indicator"
+        >
           <div className={`flashlight ${isFlashlightOn ? "active" : ""}`} />
         </section>
       )}
@@ -883,7 +989,11 @@ export default function App() {
         {isHoldingExit ? (
           <div
             className="hold-meter"
-            style={{ "--hold-ms": `${HOLD_EXIT_MS - HOLD_EXIT_SHOW_MS}ms` } as CSSProperties}
+            style={
+              {
+                "--hold-ms": `${HOLD_EXIT_MS - HOLD_EXIT_SHOW_MS}ms`,
+              } as CSSProperties
+            }
           >
             <span className="hold-fill" />
             <span className="hold-label">KEEP HOLDING TO LEAVE</span>

@@ -1,6 +1,6 @@
 import type { GameMode, RoomMode, TitleKey } from "./types";
 
-export type MenuItemId = "pvp" | "chat" | "practice" | "chart" | "settings";
+export type MenuItemId = "pvp" | "chat" | "practice" | "learn" | "settings";
 /** `title` is shown (and coloured) in the title bar while the item is highlighted. */
 export type MenuItem = { id: MenuItemId; label: string; title: TitleKey; mode?: GameMode };
 
@@ -9,7 +9,7 @@ export const MENU_ITEMS: MenuItem[] = [
   { id: "pvp", label: "PVP", title: "duel", mode: "duel" },
   { id: "chat", label: "CHAT", title: "chat", mode: "chat" },
   { id: "practice", label: "PRACTICE", title: "practice", mode: "practice" },
-  { id: "chart", label: "LEARN", title: "chart" },
+  { id: "learn", label: "LEARN", title: "learn" },
   { id: "settings", label: "SETTINGS", title: "settings" },
 ];
 
@@ -37,12 +37,12 @@ export const nextLetterHoldMs = (ms: number) =>
 
 export const formatSeconds = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
 
-/** MORSE DUEL / CHAT / PRACTICE / CHART / SETTINGS */
+/** MORSE DUEL / CHAT / PRACTICE / LEARN / SETTINGS */
 export const TITLE_WORD: Record<TitleKey, string> = {
   duel: "DUEL",
   chat: "CHAT",
   practice: "PRACTICE",
-  chart: "CHART",
+  learn: "LEARN",
   settings: "SETTINGS",
 };
 

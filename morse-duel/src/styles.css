@@ -19,7 +19,7 @@
   --duel: var(--wrong);
   --chat: var(--highlight);
   --practice: #ffffff;
-  --chart: #38bdf8;
+  --learn: #38bdf8;
   --settings: var(--text-muted);
 
   /* Accent for the current context; overridden by .mode-* */
@@ -42,8 +42,8 @@
   --accent: var(--practice);
 }
 
-.mode-chart {
-  --accent: var(--chart);
+.mode-learn {
+  --accent: var(--learn);
 }
 
 .mode-settings {
@@ -199,7 +199,7 @@ body {
 }
 
 /* ==========================================================================
-   Centre panel: menu, chart, settings
+   Centre panel: menu, learn, settings
    ========================================================================== */
 .center-panel {
   width: 100%;

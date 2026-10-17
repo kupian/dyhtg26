@@ -37,8 +37,8 @@ export const EMPTY_TYPED: TypedMessage = { ascii: "", morse: "" };
 export type GameMode = "duel" | "chat" | "practice";
 /** Modes played in a server room (practice is local only). */
 export type RoomMode = Exclude<GameMode, "practice">;
-/** Second word of the title (MORSE ___): a mode, or the chart/settings screens. */
-export type TitleKey = GameMode | "chart" | "settings";
+/** Second word of the title (MORSE ___): a mode, or the learn/settings screens. */
+export type TitleKey = GameMode | "learn" | "settings";
 
 export type LobbyProps = {
   menuIndex: number;

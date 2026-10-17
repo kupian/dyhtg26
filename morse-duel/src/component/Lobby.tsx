@@ -30,7 +30,7 @@ export default function Lobby({
   if (showChart) {
     return (
       <div className="center-panel">
-        <h2 className="panel-title">MORSE CHART</h2>
+        <h2 className="panel-title">MORSE LEARN</h2>
         <div className="reference-grid">
           {CHART_ENTRIES.map(([char, morse]) => (
             <div key={char} className="ref-item">
