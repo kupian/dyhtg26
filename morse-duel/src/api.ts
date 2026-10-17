@@ -66,6 +66,11 @@ export function describeError(err: unknown): string {
   return "Something went wrong.";
 }
 
+/** Network failure, CORS block or timeout — as opposed to the server refusing the request. */
+export function isUnreachable(err: unknown): boolean {
+  return err instanceof TypeError || (err instanceof DOMException && err.name === "AbortError");
+}
+
 export const createRoom = () => postJSON<CreateRoomResponse>("/create-room");
 
 export const joinRoom = (roomCode: RoomCode) =>

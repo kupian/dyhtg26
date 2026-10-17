@@ -1,104 +1,128 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  type CSSProperties,
+} from "react";
 import type {
   KeySymbol,
-  LogEntry,
   OpponentTypedMessage,
   RoomCode,
+  RoomMode,
   RoomState,
   SocketStatus,
   StateChangeMessage,
+  TitleKey,
   TypedMessage,
   WireSymbol,
 } from "./types";
-import { EMPTY_TYPED, MORSE_MAP, NEWCHAR } from "./types";
+import { EMPTY_TYPED, NEWCHAR } from "./types";
 import * as api from "./api";
 import { sound } from "./sound";
+import {
+  DEFAULT_LETTER_HOLD_MS,
+  MENU_ITEMS,
+  SETTINGS_ITEMS,
+  SUBMENU_ITEMS,
+  TITLE_WORD,
+  isRoomMode,
+  nextLetterHoldMs,
+} from "./menu";
+import { decodeMorse } from "./morse";
 import Lobby from "./component/Lobby";
 import Room from "./component/Room";
+import Practice from "./component/Practice";
 
-interface TapeItem {
-  char: string;
-  morse: string;
-}
+type Session = {
+  roomCode: RoomCode;
+  playerId: string;
+  isHost: boolean;
+  mode: RoomMode;
+};
 
-type Session = { roomCode: RoomCode; playerId: string; isHost: boolean };
-
-const MAX_LOG_ENTRIES = 50;
-
-// In-game typing: a letter is finished after this long with no dot/dash...
+// In-game typing: a letter is finished by holding its last stroke for the "letter hold"
+// time (a setting), or after this long with no dot/dash. Both buttons together is a space.
 const LETTER_IDLE_MS = 1000;
-// ...or by a chord (both buttons). Two chords within this window add a space.
-const DOUBLE_CHORD_MS = 500;
+// Holding both buttons this long leaves a room or practice mode...
+const HOLD_EXIT_MS = 2000;
+// ...but the leave meter only appears after this long, so a quick space doesn't flash it.
+const HOLD_EXIT_SHOW_MS = 500;
+// How long a press lights up: the bulb in menus/lobby, a player's cursor while typing.
+const DOT_FLASH_MS = 120;
+const DASH_FLASH_MS = 360;
 
 // Room codes are 4 dots/dashes (ROOM_CODES in server/src/server/game.py)
 const ROOM_CODE_LENGTH = 4;
 const JOIN_INVALID_FLASH_MS = 700;
 
-const MENU_OPTIONS = [
-  { id: "create", label: "CREATE GAME" },
-  { id: "join", label: "JOIN GAME" },
-  { id: "ref", label: "MORSE CHART" },
-  { id: "settings", label: "SETTINGS" },
-];
+const isDotKey = (key: string) =>
+  key === "." || key === "z" || key === "Z" || key === "ArrowLeft";
+const isDashKey = (key: string) =>
+  key === "-" || key === "x" || key === "X" || key === "ArrowRight";
 
 export default function App() {
-  // --- Backend / session state (from vibecoded-frontend) --------------------
+  // --- Backend / session state ----------------------------------------------
   const [session, setSession] = useState<Session | null>(null);
   const [roomState, setRoomState] = useState<RoomState>("WAITING");
   const [socketStatus, setSocketStatus] = useState<SocketStatus>("closed");
-  const [events, setEvents] = useState<LogEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isReady, setIsReady] = useState(false);
   const [isReadying, setIsReadying] = useState(false);
-  // Latest typed message from /keystroke — the server owns typed state.
+  // Latest typed message from /keystroke (or decoded locally in practice mode).
   const [typed, setTyped] = useState<TypedMessage>(EMPTY_TYPED);
   // Opponent's typed message, pushed over the game socket as they type.
   const [opponentTyped, setOpponentTyped] = useState<TypedMessage>(EMPTY_TYPED);
+  const [isInPractice, setIsInPractice] = useState(false);
+  // Title word in the menu: follows the highlighted menu item.
+  const [titleKey, setTitleKey] = useState<TitleKey>(MENU_ITEMS[0].title);
 
-  // --- Audio / design state (from ai-front-end-test) ------------------------
+  // --- Audio / design state -------------------------------------------------
   const [isMuted, setIsMuted] = useState(false);
+  // Hold the last dot/dash this long to finish a letter (Settings: 0.1–0.5s).
+  const [letterHoldMs, setLetterHoldMs] = useState(DEFAULT_LETTER_HOLD_MS);
   const [isFlashlightOn, setIsFlashlightOn] = useState(false);
-  const [isOpponentGlow, setIsOpponentGlow] = useState(false);
-  const [tapeItems, setTapeItems] = useState<TapeItem[]>([
-    { char: "S", morse: "..." },
-    { char: "O", morse: "---" },
-    { char: "S", morse: "..." },
-    { char: " ", morse: " " },
-    { char: "R", morse: ".-." },
-    { char: "E", morse: "." },
-    { char: "A", morse: ".-" },
-    { char: "D", morse: "-.." },
-    { char: "Y", morse: "-.--" },
-  ]);
+  // Cursor flashes while typing: your dot/dash, and the opponent's.
+  const [isYouSignalOn, setIsYouSignalOn] = useState(false);
+  const [isOpponentSignalOn, setIsOpponentSignalOn] = useState(false);
 
-  // Lobby navigation state
-  const [selectedIndex, setSelectedIndex] = useState(0);
+  // --- Menu navigation ------------------------------------------------------
+  const [menuIndex, setMenuIndex] = useState(0);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [subIndex, setSubIndex] = useState(0);
   const [isJoining, setIsJoining] = useState(false);
   const [joinCode, setJoinCode] = useState("");
   // A rejected code is shown red briefly, then cleared for another attempt.
   const [isJoinCodeInvalid, setIsJoinCodeInvalid] = useState(false);
-  const [showRefModal, setShowRefModal] = useState(false);
-  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showChart, setShowChart] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [settingsIndex, setSettingsIndex] = useState(0);
 
   // Pad visual press state
   const [isDotPadVisual, setIsDotPadVisual] = useState(false);
   const [isDashPadVisual, setIsDashPadVisual] = useState(false);
+  const [isHoldingExit, setIsHoldingExit] = useState(false);
 
-  // 2-Button chord tracking
+  // 2-Button chord tracking: a chord is both buttons down at the same time.
   const isLeftDownRef = useRef(false);
   const isRightDownRef = useRef(false);
-  const lastLeftDownTimeRef = useRef(0);
-  const lastRightDownTimeRef = useRef(0);
   const chordActiveRef = useRef(false);
-  const chordRegisteredRef = useRef(false);
-  const pendingChordTimerRef = useRef<number | null>(null);
-  const lastChordTimeRef = useRef(0);
-  const lastBackTimeRef = useRef(0);
+  const holdTimerRef = useRef<number | null>(null);
+  const holdShowTimerRef = useRef<number | null>(null);
+  // A dot/dash held down while typing: once held for letterHoldMs it is sent and ends the letter.
+  const strokeHoldRef = useRef<{
+    side: "left" | "right";
+    timer: number;
+    fired: boolean;
+  } | null>(null);
+  const signalTimersRef = useRef<{
+    you: number | null;
+    opponent: number | null;
+  }>({ you: null, opponent: null });
 
-  const timeoutsRef = useRef<number[]>([]);
+  const flashTimerRef = useRef<number | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
-  const nextLogId = useRef(0);
   // The server appends symbols in arrival order, so keystrokes are sent one at a time.
   const keystrokeQueueRef = useRef<Promise<void>>(Promise.resolve());
   // Bumped on enter/leave so queued keystrokes from an old room are dropped.
@@ -106,39 +130,40 @@ export default function App() {
   // Dots/dashes sent since the last NEWCHAR — i.e. a letter is in progress.
   const letterPendingRef = useRef(false);
   const letterTimerRef = useRef<number | null>(null);
-  const lastGameChordRef = useRef(0);
 
+  // Request/socket trace for developers; the UI only shows simple feedback.
   const log = useCallback((text: string) => {
-    const entry = { id: nextLogId.current++, time: new Date().toLocaleTimeString(), text };
-    setEvents((prev) => [entry, ...prev].slice(0, MAX_LOG_ENTRIES));
+    console.debug(`[morse-duel] ${text}`);
   }, []);
 
-  const clearFlashSequence = useCallback(() => {
-    timeoutsRef.current.forEach((t) => clearTimeout(t));
-    timeoutsRef.current = [];
-    setIsFlashlightOn(false);
-    setIsOpponentGlow(false);
+  /** Light the bulb for one button press (menus and lobby only). */
+  const triggerFlash = useCallback((durationMs: number) => {
+    if (flashTimerRef.current !== null)
+      window.clearTimeout(flashTimerRef.current);
+    setIsFlashlightOn(true);
+    flashTimerRef.current = window.setTimeout(() => {
+      flashTimerRef.current = null;
+      setIsFlashlightOn(false);
+    }, durationMs);
   }, []);
 
-  const triggerFlash = useCallback(
-    (durationMs = 120, isOpponent = false) => {
-      clearFlashSequence();
-      if (isOpponent) setIsOpponentGlow(true);
-      else setIsFlashlightOn(true);
-
-      const timeout = window.setTimeout(() => {
-        setIsFlashlightOn(false);
-        setIsOpponentGlow(false);
-      }, durationMs) as unknown as number;
-      timeoutsRef.current.push(timeout);
+  /** Light a player's cursor for one dot or dash; it switches off instantly. */
+  const flashSignal = useCallback(
+    (who: "you" | "opponent", symbol: KeySymbol) => {
+      const setOn = who === "you" ? setIsYouSignalOn : setIsOpponentSignalOn;
+      const timers = signalTimersRef.current;
+      if (timers[who] !== null) window.clearTimeout(timers[who]);
+      setOn(true);
+      timers[who] = window.setTimeout(
+        () => {
+          timers[who] = null;
+          setOn(false);
+        },
+        symbol === "." ? DOT_FLASH_MS : DASH_FLASH_MS,
+      );
     },
-    [clearFlashSequence]
+    [],
   );
-
-  const addTapeSymbol = useCallback((symbol: KeySymbol | " ") => {
-    const item = symbol === " " ? { char: " ", morse: " " } : { char: symbol === "." ? "·" : "—", morse: symbol };
-    setTapeItems((prev) => [...prev, item].slice(-16));
-  }, []);
 
   const clearLetterTimer = useCallback(() => {
     if (letterTimerRef.current !== null) {
@@ -147,82 +172,27 @@ export default function App() {
     }
   }, []);
 
+  const cancelStrokeHold = useCallback(() => {
+    if (strokeHoldRef.current) window.clearTimeout(strokeHoldRef.current.timer);
+    strokeHoldRef.current = null;
+  }, []);
+
   const resetTyping = useCallback(() => {
     keystrokeGenRef.current++;
     clearLetterTimer();
+    cancelStrokeHold();
     letterPendingRef.current = false;
-    lastGameChordRef.current = 0;
     setTyped(EMPTY_TYPED);
     setOpponentTyped(EMPTY_TYPED);
-  }, [clearLetterTimer]);
+  }, [clearLetterTimer, cancelStrokeHold]);
 
-  const deliverMorseMessage = useCallback(
-    (text: string) => {
-      clearFlashSequence();
-      setTapeItems([]);
+  const displayTitle: TitleKey =
+    session?.mode ?? (isInPractice ? "practice" : titleKey);
 
-      const unit = 80;
-      let timeOffset = 60;
-      const textUpper = text.toUpperCase();
-
-      for (let i = 0; i < textUpper.length; i++) {
-        const char = textUpper[i];
-        const code = MORSE_MAP[char];
-
-        if (!code || char === " ") {
-          timeOffset += unit * 3;
-          const spaceItem: TapeItem = { char: " ", morse: " " };
-          const stepTimeout = window.setTimeout(() => {
-            setTapeItems((prev) => [...prev, spaceItem].slice(-16));
-          }, timeOffset) as unknown as number;
-          timeoutsRef.current.push(stepTimeout);
-          continue;
-        }
-
-        for (const symbol of code) {
-          const onTimeout = window.setTimeout(() => {
-            setIsFlashlightOn(true);
-            if (symbol === ".") sound.playDot(isMuted);
-            else sound.playDash(isMuted);
-          }, timeOffset) as unknown as number;
-          timeoutsRef.current.push(onTimeout);
-
-          const duration = symbol === "." ? unit : unit * 3;
-          timeOffset += duration;
-
-          const offTimeout = window.setTimeout(() => {
-            setIsFlashlightOn(false);
-          }, timeOffset) as unknown as number;
-          timeoutsRef.current.push(offTimeout);
-
-          timeOffset += unit;
-        }
-
-        const item: TapeItem = { char, morse: code };
-        const appendTimeout = window.setTimeout(() => {
-          setTapeItems((prev) => [...prev, item].slice(-16));
-        }, timeOffset) as unknown as number;
-        timeoutsRef.current.push(appendTimeout);
-
-        timeOffset += unit * 2;
-      }
-    },
-    [clearFlashSequence, isMuted]
-  );
-
-  // Initial landing greeting
   useEffect(() => {
-    let timer: number | null = null;
-    if (!session) {
-      timer = window.setTimeout(() => {
-        deliverMorseMessage("SOS READY");
-      }, 50) as unknown as number;
-    }
-    return () => {
-      if (timer) window.clearTimeout(timer);
-      clearFlashSequence();
-    };
-  }, [session, deliverMorseMessage, clearFlashSequence]);
+    const word = TITLE_WORD[displayTitle];
+    document.title = `Morse ${word[0]}${word.slice(1).toLowerCase()}`;
+  }, [displayTitle]);
 
   // --- Backend integration --------------------------------------------------
 
@@ -245,7 +215,10 @@ export default function App() {
         if (!isCurrent()) return;
         log(`← WS ${ev.data}`);
 
-        let msg: StateChangeMessage | OpponentTypedMessage | Record<string, unknown>;
+        let msg:
+          | StateChangeMessage
+          | OpponentTypedMessage
+          | Record<string, unknown>;
         try {
           msg = JSON.parse(ev.data);
         } catch {
@@ -262,12 +235,15 @@ export default function App() {
           typeof msg.opponent_morse === "string" &&
           typeof msg.opponent_ascii === "string"
         ) {
-          setOpponentTyped({ ascii: msg.opponent_ascii, morse: msg.opponent_morse });
+          setOpponentTyped({
+            ascii: msg.opponent_ascii,
+            morse: msg.opponent_morse,
+          });
 
           // Flash/beep the opponent's dot or dash (not their NEWCHAR or space)
           const sym = msg.opponent_morse.slice(-1);
           if (sym === "." || sym === "-") {
-            triggerFlash(sym === "." ? 120 : 260, true);
+            flashSignal("opponent", sym);
             if (sym === ".") sound.playDot(isMuted);
             else sound.playDash(isMuted);
           }
@@ -280,13 +256,13 @@ export default function App() {
         log(`← WS closed (${ev.code}${ev.reason ? `: ${ev.reason}` : ""})`);
       };
     },
-    [log, triggerFlash, isMuted]
+    [log, flashSignal, isMuted],
   );
 
   const enterRoom = useCallback(
-    (code: string, playerId: string, isHost: boolean) => {
+    (code: string, playerId: string, isHost: boolean, mode: RoomMode) => {
       const roomCode = code as RoomCode;
-      setSession({ roomCode, playerId, isHost });
+      setSession({ roomCode, playerId, isHost, mode });
       setRoomState("WAITING");
       setSocketStatus("closed");
       resetTyping();
@@ -295,44 +271,53 @@ export default function App() {
       setIsReadying(false);
       connect(roomCode, playerId);
     },
-    [connect, resetTyping]
+    [connect, resetTyping],
   );
 
-  const createRoom = useCallback(async () => {
-    if (isLoading) return;
-    setIsLoading(true);
-    setError(null);
-    try {
-      const data = await api.createRoom();
-      log(`← created room ${data.room_code} as ${data.player_id}`);
-      enterRoom(data.room_code, data.player_id, true);
-      deliverMorseMessage(`ROOM ${data.room_code} CREATED`);
-      sound.playMenu(isMuted);
-    } catch (err) {
-      console.error("createRoom failed", err);
-      setError(api.describeError(err));
-      sound.playError(isMuted);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [isLoading, enterRoom, deliverMorseMessage, log, isMuted]);
+  const createRoom = useCallback(
+    async (mode: RoomMode) => {
+      if (isLoading) return;
+      setIsLoading(true);
+      setError(null);
+      try {
+        const data = await api.createRoom();
+        log(`← created room ${data.room_code} as ${data.player_id}`);
+        enterRoom(data.room_code, data.player_id, true, mode);
+        sound.playMenu(isMuted);
+      } catch (err) {
+        console.error("createRoom failed", err);
+        setError(
+          api.isUnreachable(err)
+            ? "CAN'T REACH THE SERVER"
+            : "COULDN'T CREATE A ROOM",
+        );
+        sound.playError(isMuted);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [isLoading, enterRoom, log, isMuted],
+  );
 
   const joinRoom = useCallback(
-    async (code: RoomCode) => {
+    async (code: RoomCode, mode: RoomMode) => {
       if (isLoading) return;
       setIsLoading(true);
       setError(null);
       try {
         const data = await api.joinRoom(code);
         log(`← joined room ${data.room_code} as ${data.player_id}`);
-        enterRoom(data.room_code, data.player_id, false);
+        enterRoom(data.room_code, data.player_id, false, mode);
         setIsJoining(false);
         setJoinCode("");
-        deliverMorseMessage(`ROOM ${code} JOINED`);
         sound.playMenu(isMuted);
       } catch (err) {
         console.error("joinRoom failed", err);
-        setError(api.describeError(err));
+        setError(
+          api.isUnreachable(err)
+            ? "CAN'T REACH THE SERVER"
+            : "COULDN'T JOIN THAT ROOM",
+        );
         sound.playError(isMuted);
         setIsJoinCodeInvalid(true);
         window.setTimeout(() => {
@@ -343,24 +328,25 @@ export default function App() {
         setIsLoading(false);
       }
     },
-    [isLoading, enterRoom, deliverMorseMessage, log, isMuted]
+    [isLoading, enterRoom, log, isMuted],
   );
 
   /** Add a dot/dash to the join code; the 4th symbol submits it. */
   const typeJoinSymbol = useCallback(
     (symbol: KeySymbol) => {
+      const mode = MENU_ITEMS[menuIndex].mode;
+      if (!isRoomMode(mode)) return;
       if (joinCode.length >= ROOM_CODE_LENGTH) return; // joining, or showing a rejected code
-      triggerFlash(symbol === "." ? 90 : 240);
       if (symbol === ".") sound.playDot(isMuted);
       else sound.playDash(isMuted);
-      addTapeSymbol(symbol);
       setError(null);
 
       const next = joinCode + symbol;
       setJoinCode(next);
-      if (next.length === ROOM_CODE_LENGTH) void joinRoom(next as RoomCode);
+      if (next.length === ROOM_CODE_LENGTH)
+        void joinRoom(next as RoomCode, mode);
     },
-    [joinCode, triggerFlash, isMuted, addTapeSymbol, joinRoom]
+    [menuIndex, joinCode, isMuted, joinRoom],
   );
 
   const leaveRoom = useCallback(() => {
@@ -371,15 +357,13 @@ export default function App() {
     setSocketStatus("closed");
     setRoomState("WAITING");
     resetTyping();
-    setEvents([]);
     setError(null);
     setIsReady(false);
     setIsReadying(false);
     setIsJoining(false);
     setJoinCode("");
-    deliverMorseMessage("STANDBY");
     sound.playMenu(isMuted);
-  }, [deliverMorseMessage, isMuted, resetTyping]);
+  }, [isMuted, resetTyping]);
 
   const readyUp = useCallback(async () => {
     if (!session || isReady || isReadying) return;
@@ -389,7 +373,6 @@ export default function App() {
       const data = await api.readyUp(session.roomCode, session.playerId);
       log(`← ${data.message}`);
       setIsReady(true);
-      deliverMorseMessage("READY");
       sound.playMenu(isMuted);
     } catch (err) {
       log(`✗ /ready: ${api.describeError(err)}`);
@@ -397,11 +380,11 @@ export default function App() {
     } finally {
       setIsReadying(false);
     }
-  }, [session, isReady, isReadying, log, deliverMorseMessage, isMuted]);
+  }, [session, isReady, isReadying, log, isMuted]);
 
-  // --- In-game typing ---------------------------------------------------------
-  // Dots/dashes are sent as typed. A letter is finished by LETTER_IDLE_MS without
-  // input or by one chord, which sends NEWCHAR; two chords in a row add a space.
+  // --- Typing (in a room, or practice mode) -------------------------------------
+  // Dots/dashes are sent as typed. A letter is finished (NEWCHAR) by holding its last
+  // stroke for letterHoldMs, or by LETTER_IDLE_MS without input. Both buttons is a space.
 
   /** Queue a keystroke behind any in flight, so the server sees them in typed order. */
   const postKeystroke = useCallback(
@@ -417,13 +400,31 @@ export default function App() {
           const data = await api.sendKeystroke(roomCode, playerId, symbol);
           if (gen !== keystrokeGenRef.current) return;
           log(`← keystroke: ${JSON.stringify(data)}`);
-          setTyped({ ascii: data.current_sentence_ascii, morse: data.current_sentence_morse });
+          setTyped({
+            ascii: data.current_sentence_ascii,
+            morse: data.current_sentence_morse,
+          });
         } catch (err) {
           log(`✗ /keystroke: ${api.describeError(err)}`);
         }
       });
     },
-    [session, log]
+    [session, log],
+  );
+
+  /** Send a symbol to the server, or in practice mode decode it locally. */
+  const emitSymbol = useCallback(
+    (symbol: WireSymbol) => {
+      if (isInPractice) {
+        setTyped((prev) => {
+          const morse = prev.morse + symbol;
+          return { morse, ascii: decodeMorse(morse) };
+        });
+        return;
+      }
+      postKeystroke(symbol);
+    },
+    [isInPractice, postKeystroke],
   );
 
   /** End the letter in progress, if any. */
@@ -431,322 +432,410 @@ export default function App() {
     clearLetterTimer();
     if (!letterPendingRef.current) return;
     letterPendingRef.current = false;
-    postKeystroke(NEWCHAR);
-  }, [clearLetterTimer, postKeystroke]);
+    emitSymbol(NEWCHAR);
+  }, [clearLetterTimer, emitSymbol]);
 
   const typeSymbol = useCallback(
     (symbol: KeySymbol) => {
-      addTapeSymbol(symbol);
-      triggerFlash(symbol === "." ? 90 : 240);
+      flashSignal("you", symbol);
       if (symbol === ".") sound.playDot(isMuted);
       else sound.playDash(isMuted);
 
-      postKeystroke(symbol);
+      emitSymbol(symbol);
       letterPendingRef.current = true;
-      lastGameChordRef.current = 0; // a symbol between two chords breaks the double-chord
       clearLetterTimer();
       letterTimerRef.current = window.setTimeout(commitLetter, LETTER_IDLE_MS);
     },
-    [addTapeSymbol, triggerFlash, isMuted, postKeystroke, clearLetterTimer, commitLetter]
+    [flashSignal, isMuted, emitSymbol, clearLetterTimer, commitLetter],
   );
 
-  /** Both buttons together: once ends the letter, twice in a row adds a space. */
-  const handleGameChord = useCallback(() => {
-    const now = Date.now();
+  /** Both buttons together: finish any letter in progress, then a space. */
+  const typeSpace = useCallback(() => {
     sound.playMenu(isMuted);
-    triggerFlash(140);
+    commitLetter();
+    emitSymbol(" ");
+    emitSymbol(NEWCHAR);
+  }, [isMuted, commitLetter, emitSymbol]);
 
-    if (now - lastGameChordRef.current < DOUBLE_CHORD_MS) {
-      lastGameChordRef.current = 0;
-      commitLetter(); // normally already done by the first chord
-      addTapeSymbol(" ");
-      postKeystroke(" ");
-      postKeystroke(NEWCHAR);
-    } else {
-      lastGameChordRef.current = now;
-      commitLetter();
+  /** A dot/dash went down while typing: if it's still held after letterHoldMs, send it and end the letter. */
+  const startStrokeHold = useCallback(
+    (side: "left" | "right") => {
+      cancelStrokeHold();
+      clearLetterTimer(); // the idle pause restarts from this stroke's release
+      const hold = { side, fired: false, timer: 0 };
+      hold.timer = window.setTimeout(() => {
+        hold.fired = true;
+        typeSymbol(side === "left" ? "." : "-");
+        commitLetter();
+      }, letterHoldMs);
+      strokeHoldRef.current = hold;
+    },
+    [
+      cancelStrokeHold,
+      clearLetterTimer,
+      typeSymbol,
+      commitLetter,
+      letterHoldMs,
+    ],
+  );
+
+  const enterPractice = useCallback(() => {
+    resetTyping();
+    setIsInPractice(true);
+  }, [resetTyping]);
+
+  const exitPractice = useCallback(() => {
+    resetTyping();
+    setIsInPractice(false);
+    sound.playMenu(isMuted);
+  }, [resetTyping, isMuted]);
+
+  const isTyping =
+    isInPractice || (session !== null && roomState === "PLAYING");
+
+  // --- Hold both to leave -----------------------------------------------------
+
+  const cancelHoldExit = useCallback(() => {
+    for (const ref of [holdTimerRef, holdShowTimerRef]) {
+      if (ref.current !== null) window.clearTimeout(ref.current);
+      ref.current = null;
     }
-  }, [isMuted, triggerFlash, commitLetter, addTapeSymbol, postKeystroke]);
+    setIsHoldingExit(false);
+  }, []);
 
-  const inGame = session !== null && roomState === "PLAYING";
+  const startHoldExit = useCallback(
+    (onExit: () => void) => {
+      cancelHoldExit();
+      holdShowTimerRef.current = window.setTimeout(() => {
+        holdShowTimerRef.current = null;
+        setIsHoldingExit(true);
+      }, HOLD_EXIT_SHOW_MS);
+      holdTimerRef.current = window.setTimeout(() => {
+        holdTimerRef.current = null;
+        setIsHoldingExit(false);
+        onExit();
+      }, HOLD_EXIT_MS);
+    },
+    [cancelHoldExit],
+  );
 
-  // Close socket and stop the letter timer on unmount
+  // Close socket and stop timers on unmount
   useEffect(
     () => () => {
       socketRef.current?.close();
       clearLetterTimer();
+      cancelStrokeHold();
+      cancelHoldExit();
+      const timers = signalTimersRef.current;
+      if (timers.you !== null) window.clearTimeout(timers.you);
+      if (timers.opponent !== null) window.clearTimeout(timers.opponent);
+      if (flashTimerRef.current !== null)
+        window.clearTimeout(flashTimerRef.current);
     },
-    [clearLetterTimer]
+    [clearLetterTimer, cancelStrokeHold, cancelHoldExit],
+  );
+
+  // --- Menu actions -------------------------------------------------------------
+
+  const highlightMenuItem = useCallback((index: number) => {
+    setMenuIndex(index);
+    setTitleKey(MENU_ITEMS[index].title);
+  }, []);
+
+  /** Run a main-menu item: room modes open their CREATE / JOIN block. */
+  const selectTopItem = useCallback(
+    (index: number) => {
+      const item = MENU_ITEMS[index];
+      sound.playMenu(isMuted);
+      setError(null);
+
+      if (isRoomMode(item.mode)) {
+        setIsExpanded(true);
+        setSubIndex(0);
+      } else if (item.id === "practice") {
+        enterPractice();
+      } else if (item.id === "learn") {
+        setShowChart(true);
+      } else if (item.id === "settings") {
+        setSettingsIndex(0);
+        setShowSettings(true);
+      }
+    },
+    [isMuted, enterPractice],
+  );
+
+  /** CREATE / JOIN under the open mode. */
+  const selectSubItem = useCallback(
+    (index: number) => {
+      const mode = MENU_ITEMS[menuIndex].mode;
+      if (!isRoomMode(mode)) return;
+      sound.playMenu(isMuted);
+
+      if (SUBMENU_ITEMS[index].id === "create") {
+        void createRoom(mode);
+      } else {
+        setIsJoining(true);
+        setJoinCode("");
+        setError(null);
+      }
+    },
+    [menuIndex, isMuted, createRoom],
+  );
+
+  const activateSetting = useCallback(
+    (index: number) => {
+      const id = SETTINGS_ITEMS[index].id;
+      if (id === "sound") {
+        setIsMuted((m) => !m);
+        sound.playMenu(false);
+      } else if (id === "letterHold") {
+        setLetterHoldMs(nextLetterHoldMs);
+        sound.playMenu(isMuted);
+      } else if (id === "testDot") {
+        sound.playDot(isMuted);
+      } else {
+        triggerFlash(DASH_FLASH_MS); // the Z press lit a dot; show a dash
+        sound.playDash(isMuted);
+      }
+    },
+    [isMuted, triggerFlash],
+  );
+
+  const handleMenuItemClick = useCallback(
+    (index: number) => {
+      setIsJoining(false);
+      setJoinCode("");
+      if (isExpanded && index === menuIndex) {
+        // Clicking the open mode again folds it back up
+        setIsExpanded(false);
+        sound.playMenu(isMuted);
+        return;
+      }
+      setIsExpanded(false);
+      highlightMenuItem(index);
+      selectTopItem(index);
+    },
+    [isExpanded, menuIndex, isMuted, highlightMenuItem, selectTopItem],
+  );
+
+  const handleSubItemClick = useCallback(
+    (index: number) => {
+      setSubIndex(index);
+      selectSubItem(index);
+    },
+    [selectSubItem],
+  );
+
+  const handleSettingClick = useCallback(
+    (index: number) => {
+      setSettingsIndex(index);
+      activateSetting(index);
+    },
+    [activateSetting],
   );
 
   // --- 2-Button action dispatch ---------------------------------------------
+  // Everywhere: X (right) cycles, Z (left) selects, both buttons go back.
+  // Typing: Z/X are dot/dash, both ends a letter, holding both leaves.
 
-  const handleEnterAction = useCallback(() => {
-    if (Date.now() - lastBackTimeRef.current < 600) return;
-    if (inGame) {
-      handleGameChord(); // keyboard Enter/Space acts like pressing both buttons
-      return;
-    }
-    sound.playMenu(isMuted);
-    triggerFlash(140);
-
-    if (showSettingsModal) {
-      setIsMuted((m) => !m);
-      return;
-    }
-    if (showRefModal) {
-      setShowRefModal(false);
-      return;
-    }
-
-    if (session) {
-      if (roomState === "WAITING") {
-        void readyUp();
-      }
-      return;
-    }
-
-    if (isJoining) {
-      // A full code submits itself (typeJoinSymbol); ENTER only prompts for the rest.
-      if (joinCode.length < ROOM_CODE_LENGTH) {
-        sound.playError(isMuted);
-        deliverMorseMessage("ENTER 4 SIGNALS");
-      }
-      return;
-    }
-
-    if (selectedIndex === 0) {
-      void createRoom();
-    } else if (selectedIndex === 1) {
-      setIsJoining(true);
-      setJoinCode("");
-      setError(null);
-      deliverMorseMessage("ENTER 4 SIGNAL CODE TO JOIN");
-    } else if (selectedIndex === 2) {
-      setShowRefModal(true);
-      deliverMorseMessage("MORSE CHART");
-    } else if (selectedIndex === 3) {
-      setShowSettingsModal(true);
-      deliverMorseMessage("SETTINGS");
-    }
-  }, [
-    showSettingsModal,
-    showRefModal,
-    session,
-    roomState,
-    isJoining,
-    joinCode,
-    selectedIndex,
-    isMuted,
-    triggerFlash,
-    createRoom,
-    deliverMorseMessage,
-    readyUp,
-    inGame,
-    handleGameChord,
-  ]);
-
+  /** Both buttons (or Escape): step back out of whatever is open. */
   const handleBackAction = useCallback(() => {
-    if (pendingChordTimerRef.current !== null) {
-      window.clearTimeout(pendingChordTimerRef.current);
-      pendingChordTimerRef.current = null;
-    }
-    lastBackTimeRef.current = Date.now();
     sound.playMenu(isMuted);
-    triggerFlash(80);
+    triggerFlash(DOT_FLASH_MS);
 
-    if (showSettingsModal) {
-      setShowSettingsModal(false);
-      return;
-    }
-    if (showRefModal) {
-      setShowRefModal(false);
-      return;
-    }
-    if (isJoining) {
+    if (showSettings) {
+      setShowSettings(false);
+    } else if (showChart) {
+      setShowChart(false);
+    } else if (session) {
+      leaveRoom();
+    } else if (isInPractice) {
+      exitPractice();
+    } else if (isJoining) {
       setIsJoining(false);
       setJoinCode("");
       setError(null);
-      deliverMorseMessage("CANCELLED");
-      return;
+    } else if (isExpanded) {
+      setIsExpanded(false);
     }
-    if (session) {
-      leaveRoom();
-    }
-  }, [showSettingsModal, showRefModal, isJoining, session, isMuted, triggerFlash, deliverMorseMessage, leaveRoom]);
+  }, [
+    isMuted,
+    triggerFlash,
+    showSettings,
+    showChart,
+    session,
+    leaveRoom,
+    isInPractice,
+    exitPractice,
+    isJoining,
+    isExpanded,
+  ]);
 
+  /** Z / left: select (dot while typing). */
   const handleLeftAction = useCallback(() => {
-    if (Date.now() - lastBackTimeRef.current < 600) return;
-
-    if (showSettingsModal) {
-      setIsMuted((m) => !m);
-      sound.playMenu(false);
+    if (isTyping) {
+      typeSymbol(".");
       return;
     }
-    if (showRefModal) {
+    // Outside games the bulb mirrors the press: dot-length for Z, dash-length for X
+    triggerFlash(DOT_FLASH_MS);
+    if (showSettings) {
+      activateSetting(settingsIndex);
+    } else if (showChart) {
       sound.playMenu(isMuted);
-      return;
-    }
-
-    if (session) {
-      if (roomState === "PLAYING") {
-        typeSymbol(".");
-      } else if (roomState === "WAITING") {
-        triggerFlash(90);
-        sound.playMenu(isMuted);
-      }
-      return;
-    }
-
-    if (isJoining) {
+    } else if (session) {
+      if (roomState === "WAITING") void readyUp();
+    } else if (isJoining) {
       typeJoinSymbol(".");
-      return;
+    } else if (isExpanded) {
+      selectSubItem(subIndex);
+    } else {
+      selectTopItem(menuIndex);
     }
+  }, [
+    isTyping,
+    typeSymbol,
+    triggerFlash,
+    showSettings,
+    activateSetting,
+    settingsIndex,
+    showChart,
+    isMuted,
+    session,
+    roomState,
+    readyUp,
+    isJoining,
+    typeJoinSymbol,
+    isExpanded,
+    selectSubItem,
+    subIndex,
+    selectTopItem,
+    menuIndex,
+  ]);
 
-    // Main menu: left selects the highlighted option (right cycles through them)
-    handleEnterAction();
-  }, [showSettingsModal, showRefModal, session, roomState, isJoining, isMuted, triggerFlash, typeSymbol, typeJoinSymbol, handleEnterAction]);
-
+  /** X / right: next option (dash while typing). */
   const handleRightAction = useCallback(() => {
-    if (Date.now() - lastBackTimeRef.current < 600) return;
-
-    if (showSettingsModal) {
-      setIsMuted((m) => !m);
-      sound.playMenu(false);
+    if (isTyping) {
+      typeSymbol("-");
       return;
     }
-    if (showRefModal) {
+    triggerFlash(DASH_FLASH_MS);
+    if (showSettings) {
       sound.playMenu(isMuted);
-      return;
-    }
-
-    if (session) {
-      if (roomState === "PLAYING") {
-        typeSymbol("-");
-      } else if (roomState === "WAITING") {
-        triggerFlash(240);
-        sound.playMenu(isMuted);
-      }
-      return;
-    }
-
-    if (isJoining) {
+      setSettingsIndex((i) => (i + 1) % SETTINGS_ITEMS.length);
+    } else if (showChart || session) {
+      sound.playMenu(isMuted); // nothing to cycle here
+    } else if (isJoining) {
       typeJoinSymbol("-");
-      return;
+    } else {
+      sound.playMenu(isMuted);
+      if (isExpanded) setSubIndex((i) => (i + 1) % SUBMENU_ITEMS.length);
+      else highlightMenuItem((menuIndex + 1) % MENU_ITEMS.length);
     }
+  }, [
+    isTyping,
+    typeSymbol,
+    triggerFlash,
+    showSettings,
+    isMuted,
+    showChart,
+    session,
+    isJoining,
+    typeJoinSymbol,
+    isExpanded,
+    highlightMenuItem,
+    menuIndex,
+  ]);
 
-    // Main menu: right cycles to the next option, wrapping to the top
-    sound.playMenu(isMuted);
-    setSelectedIndex((prev) => (prev < MENU_OPTIONS.length - 1 ? prev + 1 : 0));
-  }, [showSettingsModal, showRefModal, session, roomState, isJoining, isMuted, triggerFlash, typeSymbol, typeJoinSymbol]);
+  /** Keyboard Enter/Space: while typing, Enter ends the letter and Space adds a space; otherwise both act like Z. */
+  const handleEnterKey = useCallback(
+    (key: string) => {
+      if (isTyping) {
+        if (key === " ") typeSpace();
+        else commitLetter();
+      } else if (!isJoining) {
+        handleLeftAction();
+      }
+    },
+    [isTyping, typeSpace, commitLetter, isJoining, handleLeftAction],
+  );
 
   const onChordPress = useCallback(() => {
     chordActiveRef.current = true;
-    const now = Date.now();
-    if (now - lastBackTimeRef.current < 600) return;
-    if (chordRegisteredRef.current) return; // already counted this simultaneous press
-
-    chordRegisteredRef.current = true;
-
-    if (inGame) {
-      // In game a chord acts immediately (no ENTER/BACK wait); a double chord is a space.
-      handleGameChord();
+    cancelStrokeHold(); // the first button's hold is now part of the chord
+    if (session || isInPractice) {
+      // In a room or practice mode, holding both leaves; a tap is a space while typing.
+      startHoldExit(session ? leaveRoom : exitPractice);
+      if (isTyping) typeSpace();
+      else triggerFlash(DOT_FLASH_MS); // waiting room: bulb shows the press
       return;
     }
+    handleBackAction();
+  }, [
+    cancelStrokeHold,
+    session,
+    isInPractice,
+    startHoldExit,
+    leaveRoom,
+    exitPractice,
+    isTyping,
+    typeSpace,
+    triggerFlash,
+    handleBackAction,
+  ]);
 
-    if (pendingChordTimerRef.current !== null) {
-      // Second chord arrived before the enter timer fired -> BACK
-      window.clearTimeout(pendingChordTimerRef.current);
-      pendingChordTimerRef.current = null;
-      lastBackTimeRef.current = now;
-      handleBackAction();
-      return;
-    }
-
-    if (now - lastChordTimeRef.current < 400) {
-      // Second chord shortly after the previous one -> BACK
-      lastBackTimeRef.current = now;
-      handleBackAction();
-      return;
-    }
-
-    // First chord -> wait briefly; if no second chord arrives, trigger ENTER
-    pendingChordTimerRef.current = window.setTimeout(() => {
-      pendingChordTimerRef.current = null;
-      if (Date.now() - lastBackTimeRef.current >= 600) {
-        handleEnterAction();
-      }
-    }, 250) as unknown as number;
-    lastChordTimeRef.current = now;
-  }, [handleBackAction, handleEnterAction, inGame, handleGameChord]);
-
-  // Menus accept a sloppy chord (second press within 160ms); in game both must be held,
-  // otherwise a quick dash-then-dot would end the letter.
-  const isChordWith = useCallback(
-    (otherDown: boolean, otherLastDown: number) =>
-      otherDown || (!inGame && Date.now() - otherLastDown < 160),
-    [inGame]
+  /** Release of a tap: returns false if it was a held stroke that already ended the letter. */
+  const endStrokeHold = useCallback(
+    (side: "left" | "right") => {
+      const hold = strokeHoldRef.current;
+      if (hold?.side !== side) return true;
+      cancelStrokeHold();
+      return !hold.fired;
+    },
+    [cancelStrokeHold],
   );
 
+  // Taps act on release; a chord needs both buttons down at once, so quick taps are
+  // never misread as one. Releases that end a chord do nothing else.
   const handleDotPointerDown = useCallback(() => {
+    if (isLeftDownRef.current) return;
     isLeftDownRef.current = true;
-    lastLeftDownTimeRef.current = Date.now();
     setIsDotPadVisual(true);
-
-    if (isChordWith(isRightDownRef.current, lastRightDownTimeRef.current)) {
-      onChordPress();
-    }
-  }, [onChordPress, isChordWith]);
+    if (isRightDownRef.current) onChordPress();
+    else if (isTyping) startStrokeHold("left");
+  }, [onChordPress, isTyping, startStrokeHold]);
 
   const handleDotPointerUp = useCallback(() => {
+    if (!isLeftDownRef.current) return;
     isLeftDownRef.current = false;
     setIsDotPadVisual(false);
-
-    if (Date.now() - lastBackTimeRef.current < 600) {
-      chordActiveRef.current = false;
-      if (!isRightDownRef.current) chordRegisteredRef.current = false;
+    if (chordActiveRef.current) {
+      cancelHoldExit();
+      if (!isRightDownRef.current) chordActiveRef.current = false;
       return;
     }
-
-    if (chordActiveRef.current) {
-      if (!isRightDownRef.current) {
-        chordActiveRef.current = false;
-        chordRegisteredRef.current = false;
-      }
-    } else {
-      handleLeftAction();
-    }
-  }, [handleLeftAction]);
+    if (endStrokeHold("left")) handleLeftAction();
+  }, [handleLeftAction, cancelHoldExit, endStrokeHold]);
 
   const handleDashPointerDown = useCallback(() => {
+    if (isRightDownRef.current) return;
     isRightDownRef.current = true;
-    lastRightDownTimeRef.current = Date.now();
     setIsDashPadVisual(true);
-
-    if (isChordWith(isLeftDownRef.current, lastLeftDownTimeRef.current)) {
-      onChordPress();
-    }
-  }, [onChordPress, isChordWith]);
+    if (isLeftDownRef.current) onChordPress();
+    else if (isTyping) startStrokeHold("right");
+  }, [onChordPress, isTyping, startStrokeHold]);
 
   const handleDashPointerUp = useCallback(() => {
+    if (!isRightDownRef.current) return;
     isRightDownRef.current = false;
     setIsDashPadVisual(false);
-
-    if (Date.now() - lastBackTimeRef.current < 600) {
-      chordActiveRef.current = false;
-      if (!isLeftDownRef.current) chordRegisteredRef.current = false;
+    if (chordActiveRef.current) {
+      cancelHoldExit();
+      if (!isLeftDownRef.current) chordActiveRef.current = false;
       return;
     }
-
-    if (chordActiveRef.current) {
-      if (!isLeftDownRef.current) {
-        chordActiveRef.current = false;
-        chordRegisteredRef.current = false;
-      }
-    } else {
-      handleRightAction();
-    }
-  }, [handleRightAction]);
+    if (endStrokeHold("right")) handleRightAction();
+  }, [handleRightAction, cancelHoldExit, endStrokeHold]);
 
   // Keyboard navigation listener
   useEffect(() => {
@@ -754,20 +843,15 @@ export default function App() {
       if (e.repeat) return;
       if (document.activeElement?.tagName === "INPUT") return;
 
-      const isDotKey = e.key === "." || e.key === "z" || e.key === "Z" || e.key === "ArrowLeft";
-      const isDashKey = e.key === "-" || e.key === "x" || e.key === "X" || e.key === "ArrowRight";
-
-      if (isDotKey) {
+      if (isDotKey(e.key)) {
         e.preventDefault();
         handleDotPointerDown();
-      } else if (isDashKey) {
+      } else if (isDashKey(e.key)) {
         e.preventDefault();
         handleDashPointerDown();
       } else if (e.key === "Enter" || e.key === " ") {
         e.preventDefault();
-        if (Date.now() - lastBackTimeRef.current >= 600) {
-          handleEnterAction();
-        }
+        handleEnterKey(e.key);
       } else if (e.key === "Escape" || e.key === "Backspace") {
         e.preventDefault();
         handleBackAction();
@@ -775,136 +859,187 @@ export default function App() {
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
-      const isDotKey = e.key === "." || e.key === "z" || e.key === "Z" || e.key === "ArrowLeft";
-      const isDashKey = e.key === "-" || e.key === "x" || e.key === "X" || e.key === "ArrowRight";
+      if (isDotKey(e.key)) handleDotPointerUp();
+      if (isDashKey(e.key)) handleDashPointerUp();
+    };
 
-      if (isDotKey) handleDotPointerUp();
-      if (isDashKey) handleDashPointerUp();
+    // Key-ups are lost when the window loses focus; don't leave a button stuck down.
+    const releaseAll = () => {
+      isLeftDownRef.current = false;
+      isRightDownRef.current = false;
+      chordActiveRef.current = false;
+      setIsDotPadVisual(false);
+      setIsDashPadVisual(false);
+      cancelHoldExit();
+      cancelStrokeHold();
     };
 
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("keyup", handleKeyUp);
+    window.addEventListener("blur", releaseAll);
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
+      window.removeEventListener("blur", releaseAll);
     };
   }, [
     handleDotPointerDown,
     handleDotPointerUp,
     handleDashPointerDown,
     handleDashPointerUp,
-    handleEnterAction,
+    handleEnterKey,
     handleBackAction,
+    cancelHoldExit,
+    cancelStrokeHold,
   ]);
+
+  // What each control does on the current screen: [keys, action] hints and pad labels.
+  let hints: [string, string][];
+  let padLabels: [string, string];
+  if (isTyping) {
+    hints = [
+      ["HOLD STROKE / PAUSE", "END LETTER"],
+      ["BOTH", "SPACE"],
+      ["HOLD BOTH", "LEAVE"],
+    ];
+    padLabels = ["DOT", "DASH"];
+  } else if (session) {
+    hints = [
+      ["Z", "READY"],
+      ["HOLD BOTH", "LEAVE"],
+    ];
+    padLabels = ["READY", ""];
+  } else if (showChart) {
+    hints = [["BOTH", "BACK"]];
+    padLabels = ["", ""];
+  } else if (isJoining) {
+    hints = [
+      ["Z", "DOT"],
+      ["X", "DASH"],
+      ["BOTH", "BACK"],
+    ];
+    padLabels = ["DOT", "DASH"];
+  } else {
+    hints = [
+      ["Z", "SELECT"],
+      ["X", "NEXT"],
+      ["BOTH", "BACK"],
+    ];
+    padLabels = ["SELECT", "NEXT"];
+  }
 
   return (
     <div className="app">
-      <header className="top-bar">
-        <div className="brand">
-          <span className="brand-title">MORSE DUEL</span>
-          <span className="brand-sub">[ 2-ACTION ]</span>
-        </div>
-        {isMuted && <span className="top-status muted-badge">[ MUTED ]</span>}
+      <header className={`top-bar mode-${displayTitle}`}>
+        <h1 className="brand-title">
+          MORSE <span className="brand-mode">{TITLE_WORD[displayTitle]}</span>
+        </h1>
+        {isMuted && <span className="muted-badge">MUTED</span>}
       </header>
 
-      <section className="flashlight-container" aria-label="Morse Flashlight Indicator">
-        <div
-          className={`flashlight ${
-            isFlashlightOn ? "active" : isOpponentGlow ? "active-opponent" : ""
-          }`}
-        />
-
-        <div className="morse-display">
-          <div className="teletype-tape">
-            {tapeItems.map((item, idx) => (
-              <div
-                key={idx}
-                className={`tape-pair ${item.char === " " ? "space" : ""}`}
-              >
-                <span className="tape-morse">{item.morse}</span>
-                <span className="tape-char">{item.char}</span>
-              </div>
-            ))}
-          </div>
-          <span className="cursor" />
-        </div>
-      </section>
+      {/* While typing, the cursors flash instead of the bulb */}
+      {!isTyping && (
+        <section
+          className="flashlight-container"
+          aria-label="Morse Flashlight Indicator"
+        >
+          <div className={`flashlight ${isFlashlightOn ? "active" : ""}`} />
+        </section>
+      )}
 
       {session ? (
         <Room
+          mode={session.mode}
           roomCode={session.roomCode}
-          playerId={session.playerId}
           isHost={session.isHost}
           roomState={roomState}
           socketStatus={socketStatus}
           typed={typed}
           opponentTyped={opponentTyped}
-          events={events}
+          isYouSignalOn={isYouSignalOn}
+          isOpponentSignalOn={isOpponentSignalOn}
           isReady={isReady}
           isReadying={isReadying}
-          isMuted={isMuted}
-          onLog={log}
-          onLeave={leaveRoom}
           onReady={readyUp}
-          onSendSignal={typeSymbol}
         />
+      ) : isInPractice ? (
+        <Practice typed={typed} isSignalOn={isYouSignalOn} />
       ) : (
         <Lobby
-          onCreate={createRoom}
-          onJoin={joinRoom}
-          isLoading={isLoading}
-          errorMessage={error}
-          onClearError={() => setError(null)}
-          isMuted={isMuted}
-          onToggleMute={() => setIsMuted((m) => !m)}
-          selectedIndex={selectedIndex}
-          onSelectIndexChange={setSelectedIndex}
+          menuIndex={menuIndex}
+          isExpanded={isExpanded}
+          subIndex={subIndex}
           isJoining={isJoining}
-          onToggleJoining={setIsJoining}
           joinCode={joinCode}
           isJoinCodeInvalid={isJoinCodeInvalid}
-          onJoinCodeChange={setJoinCode}
-          showRefModal={showRefModal}
-          onToggleRefModal={setShowRefModal}
-          showSettingsModal={showSettingsModal}
-          onToggleSettingsModal={setShowSettingsModal}
-          onTriggerMessageDelivery={deliverMorseMessage}
+          isLoading={isLoading}
+          errorMessage={error}
+          onMenuItemClick={handleMenuItemClick}
+          onSubItemClick={handleSubItemClick}
+          showChart={showChart}
+          showSettings={showSettings}
+          settingsIndex={settingsIndex}
+          onSettingClick={handleSettingClick}
+          isMuted={isMuted}
+          letterHoldMs={letterHoldMs}
         />
       )}
 
-      <div className="chord-banner">
-        <span>
-          BOTH 1x: <span className="chord-action">ENTER</span>
-        </span>
-        <span>|</span>
-        <span>
-          BOTH 2x: <span className="chord-action">BACK</span>
-        </span>
+      <div className="control-hints" aria-live="polite">
+        {isHoldingExit ? (
+          <div
+            className="hold-meter"
+            style={
+              {
+                "--hold-ms": `${HOLD_EXIT_MS - HOLD_EXIT_SHOW_MS}ms`,
+              } as CSSProperties
+            }
+          >
+            <span className="hold-fill" />
+            <span className="hold-label">KEEP HOLDING TO LEAVE</span>
+          </div>
+        ) : (
+          hints.map(([keys, action]) => (
+            <span key={keys} className="hint-item">
+              <span className="hint-keys">{keys}</span> {action}
+            </span>
+          ))
+        )}
       </div>
 
       <footer className="input-pads">
         <button
           type="button"
           className={`pad-btn ${isDotPadVisual ? "pressed" : ""}`}
-          onPointerDown={handleDotPointerDown}
+          onPointerDown={(e) => {
+            e.currentTarget.setPointerCapture(e.pointerId); // keep the release on this pad
+            handleDotPointerDown();
+          }}
           onPointerUp={handleDotPointerUp}
           onPointerCancel={handleDotPointerUp}
-          aria-label="Dot Button - Left Action"
+          aria-label={`Left button (Z)${padLabels[0] ? `: ${padLabels[0]}` : ""}`}
         >
           <span className="dot-icon" />
-          <span className="pad-hint">DOT [ . / Z ]</span>
+          <span className="pad-hint">
+            {padLabels[0]} <span className="pad-key">Z</span>
+          </span>
         </button>
 
         <button
           type="button"
           className={`pad-btn ${isDashPadVisual ? "pressed" : ""}`}
-          onPointerDown={handleDashPointerDown}
+          onPointerDown={(e) => {
+            e.currentTarget.setPointerCapture(e.pointerId);
+            handleDashPointerDown();
+          }}
           onPointerUp={handleDashPointerUp}
           onPointerCancel={handleDashPointerUp}
-          aria-label="Dash Button - Right Action"
+          aria-label={`Right button (X)${padLabels[1] ? `: ${padLabels[1]}` : ""}`}
         >
           <span className="dash-icon" />
-          <span className="pad-hint">DASH [ - / X ]</span>
+          <span className="pad-hint">
+            {padLabels[1]} <span className="pad-key">X</span>
+          </span>
         </button>
       </footer>
     </div>
