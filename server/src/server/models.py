@@ -22,5 +22,11 @@ class ReadyRequest(BaseModel):
 class ReadyResponse(BaseModel):
     message: str
 
+class SentenceRequest(BaseModel):
+    room_code: str
+
+class SentenceResponse(BaseModel):
+    sentence: str
+
 class ErrorResponse(BaseModel):
     error: str
