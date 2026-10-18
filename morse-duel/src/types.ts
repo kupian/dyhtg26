@@ -25,6 +25,10 @@ export type OpponentTypedMessage = { opponent_morse: string; opponent_ascii: str
 /** Sent on the game socket with the opponent's ready state (ConnectionManager._send_opponent_ready_state). */
 export type OpponentReadyMessage = { opponent_ready: boolean };
 
+/** Sent on the game socket when the opponent's socket connects or disconnects
+ * (ConnectionManager._broadcast_player_connect / _broadcast_player_disconnect). */
+export type OpponentConnectedMessage = { opponent_connected: boolean };
+
 export type SocketStatus = "connecting" | "open" | "closed";
 
 export type KeySymbol = "." | "-";
@@ -86,5 +90,7 @@ export interface RoomProps {
   isReadying: boolean;
   /** null until the server first reports the opponent's ready state. */
   isOpponentReady: boolean | null;
+  /** null until an opponent first connects; false once they've left. */
+  isOpponentConnected: boolean | null;
   onReady: () => void;
 }

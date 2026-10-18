@@ -1,10 +1,10 @@
 import type { RoomCode, RoomType, WireSymbol } from "./types";
 
 // --- Module scope: created once, not on every render -------------------------
-// Default to port 8000 on whatever host served the page, so a phone loading
-// http://<lan-ip>:8080 talks to http://<lan-ip>:8000 rather than its own localhost.
-// The Docker build sets VITE_API_URL=/api (a same-origin path proxied by nginx);
-// resolve it against the page so the WebSocket URL below is absolute.
+// VITE_API_URL is /api in dev (.env.development, proxied by Vite) and in the Docker
+// build (proxied by nginx): a same-origin path, resolved against the page so the
+// WebSocket URL below is absolute. Unset, default to port 8000 on whatever host
+// served the page, so a phone loading http://<lan-ip>:8080 doesn't call its own localhost.
 const API_BASE: string = new URL(
   import.meta.env.VITE_API_URL ?? `${window.location.protocol}//${window.location.hostname}:8000`,
   window.location.href

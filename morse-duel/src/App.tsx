@@ -7,6 +7,7 @@ import {
 } from "react";
 import type {
   KeySymbol,
+  OpponentConnectedMessage,
   OpponentReadyMessage,
   OpponentTypedMessage,
   RoomCode,
@@ -36,6 +37,7 @@ import { decodeMorse } from "./morse";
 import Lobby from "./component/Lobby";
 import Room from "./component/Room";
 import Practice from "./component/Practice";
+import Popup from "./component/Popup";
 
 type Session = {
   roomCode: RoomCode;
@@ -58,6 +60,8 @@ const DASH_FLASH_MS = 360;
 // Room codes are 4 dots/dashes (ROOM_CODES in server/src/server/game.py)
 const ROOM_CODE_LENGTH = 4;
 const JOIN_INVALID_FLASH_MS = 700;
+// Presses this soon after the game-over popup opens don't close it.
+const GAME_OVER_MIN_MS = 600;
 
 const isDotKey = (key: string) =>
   key === "." || key === "z" || key === "Z" || key === "ArrowLeft";
@@ -75,6 +79,14 @@ export default function App() {
   const [isReadying, setIsReadying] = useState(false);
   // The other player's ready state, pushed over the game socket; null until first heard.
   const [isOpponentReady, setIsOpponentReady] = useState<boolean | null>(null);
+  // Whether the other player is in the room; null until one first connects.
+  const [isOpponentConnected, setIsOpponentConnected] = useState<boolean | null>(null);
+  // Shown over the menu after the server ends a game; any button closes it.
+  const [gameOver, setGameOver] = useState<{
+    title: string;
+    detail: string;
+    shownAt: number;
+  } | null>(null);
   // Latest typed message from /keystroke (or decoded locally in practice mode).
   const [typed, setTyped] = useState<TypedMessage>(EMPTY_TYPED);
   // Opponent's typed message, pushed over the game socket as they type.
@@ -203,6 +215,53 @@ export default function App() {
 
   // --- Backend integration --------------------------------------------------
 
+  /** Close the socket and drop all room state, back to the main menu. */
+  const exitRoom = useCallback(() => {
+    const ws = socketRef.current;
+    socketRef.current = null;
+    ws?.close();
+    setSession(null);
+    setSocketStatus("closed");
+    setRoomState("WAITING");
+    resetTyping();
+    setTargetSentence(null);
+    setError(null);
+    setIsReady(false);
+    setIsReadying(false);
+    setIsOpponentReady(null);
+    setIsOpponentConnected(null);
+    setIsJoining(false);
+    setJoinCode("");
+  }, [resetTyping]);
+
+  const leaveRoom = useCallback(() => {
+    exitRoom();
+    sound.playMenu(isMuted);
+  }, [exitRoom, isMuted]);
+
+  /** The server ended the game: back to the menu, with a popup saying why. */
+  const endGame = useCallback(
+    (hasOpponentLeft: boolean) => {
+      exitRoom();
+      setGameOver({
+        title: hasOpponentLeft ? "OPPONENT LEFT" : "GAME OVER",
+        detail: hasOpponentLeft ? "Your opponent disconnected, so the game is over." : "The game has finished.",
+        shownAt: Date.now(),
+      });
+    },
+    [exitRoom],
+  );
+
+  /** Close the game-over popup. Returns false if there was none to close. */
+  const dismissGameOver = useCallback(() => {
+    if (!gameOver) return false;
+    // A button already held when the game ended shouldn't close it unseen
+    if (Date.now() - gameOver.shownAt < GAME_OVER_MIN_MS) return true;
+    setGameOver(null);
+    sound.playMenu(isMuted);
+    return true;
+  }, [gameOver, isMuted]);
+
   const connect = useCallback(
     (roomCode: RoomCode, playerId: string) => {
       const ws = api.openRoomSocket(roomCode, playerId);
@@ -211,6 +270,8 @@ export default function App() {
       log(`→ WS connect /game/${roomCode}/${playerId}`);
 
       const isCurrent = () => socketRef.current === ws;
+      // Tracked per socket, so the game-over popup can say why the game ended.
+      let hasOpponentLeft = false;
 
       ws.onopen = () => {
         if (!isCurrent()) return;
@@ -226,11 +287,17 @@ export default function App() {
           | StateChangeMessage
           | OpponentTypedMessage
           | OpponentReadyMessage
+          | OpponentConnectedMessage
           | Record<string, unknown>;
         try {
           msg = JSON.parse(ev.data);
         } catch {
           log("✗ WS message was not JSON");
+          return;
+        }
+
+        if ("state" in msg && msg.state === "FINISHED") {
+          endGame(hasOpponentLeft);
           return;
         }
 
@@ -240,6 +307,13 @@ export default function App() {
 
         if ("opponent_ready" in msg && typeof msg.opponent_ready === "boolean") {
           setIsOpponentReady(msg.opponent_ready);
+        }
+
+        if ("opponent_connected" in msg && typeof msg.opponent_connected === "boolean") {
+          setIsOpponentConnected(msg.opponent_connected);
+          hasOpponentLeft = !msg.opponent_connected;
+          if (msg.opponent_connected) sound.playMenu(isMuted);
+          else sound.playError(isMuted);
         }
 
         if (
@@ -268,7 +342,7 @@ export default function App() {
         log(`← WS closed (${ev.code}${ev.reason ? `: ${ev.reason}` : ""})`);
       };
     },
-    [log, flashSignal, isMuted],
+    [log, flashSignal, isMuted, endGame],
   );
 
   /** Enter the room the server put us in; its room_type, not the menu pick, sets the mode. */
@@ -285,6 +359,7 @@ export default function App() {
       setIsReady(false);
       setIsReadying(false);
       setIsOpponentReady(null);
+      setIsOpponentConnected(null);
       connect(roomCode, data.player_id);
     },
     [connect, resetTyping],
@@ -370,24 +445,6 @@ export default function App() {
     },
     [menuIndex, joinCode, isMuted, joinRoom],
   );
-
-  const leaveRoom = useCallback(() => {
-    const ws = socketRef.current;
-    socketRef.current = null;
-    ws?.close();
-    setSession(null);
-    setSocketStatus("closed");
-    setRoomState("WAITING");
-    resetTyping();
-    setTargetSentence(null);
-    setError(null);
-    setIsReady(false);
-    setIsReadying(false);
-    setIsOpponentReady(null);
-    setIsJoining(false);
-    setJoinCode("");
-    sound.playMenu(isMuted);
-  }, [isMuted, resetTyping]);
 
   const readyUp = useCallback(async () => {
     if (!session || isReady || isReadying) return;
@@ -684,6 +741,7 @@ export default function App() {
 
   /** Both buttons (or Escape): step back out of whatever is open. */
   const handleBackAction = useCallback(() => {
+    if (dismissGameOver()) return;
     sound.playMenu(isMuted);
     triggerFlash(DOT_FLASH_MS);
 
@@ -703,6 +761,7 @@ export default function App() {
       setIsExpanded(false);
     }
   }, [
+    dismissGameOver,
     isMuted,
     triggerFlash,
     showSettings,
@@ -721,6 +780,7 @@ export default function App() {
       typeSymbol(".");
       return;
     }
+    if (dismissGameOver()) return;
     // Outside games the bulb mirrors the press: dot-length for Z, dash-length for X
     triggerFlash(DOT_FLASH_MS);
     if (showSettings) {
@@ -739,6 +799,7 @@ export default function App() {
   }, [
     isTyping,
     typeSymbol,
+    dismissGameOver,
     triggerFlash,
     showSettings,
     activateSetting,
@@ -763,6 +824,7 @@ export default function App() {
       typeSymbol("-");
       return;
     }
+    if (dismissGameOver()) return;
     triggerFlash(DASH_FLASH_MS);
     if (showSettings) {
       sound.playMenu(isMuted);
@@ -779,6 +841,7 @@ export default function App() {
   }, [
     isTyping,
     typeSymbol,
+    dismissGameOver,
     triggerFlash,
     showSettings,
     isMuted,
@@ -940,7 +1003,10 @@ export default function App() {
   // What each control does on the current screen: [keys, action] hints and pad labels.
   let hints: [string, string][];
   let padLabels: [string, string];
-  if (isTyping) {
+  if (gameOver) {
+    hints = [["ANY BUTTON", "CONTINUE"]];
+    padLabels = ["OK", "OK"];
+  } else if (isTyping) {
     hints = [
       ["HOLD STROKE / PAUSE", "END LETTER"],
       ["BOTH", "SPACE"],
@@ -1006,6 +1072,7 @@ export default function App() {
           isReady={isReady}
           isReadying={isReadying}
           isOpponentReady={isOpponentReady}
+          isOpponentConnected={isOpponentConnected}
           onReady={readyUp}
         />
       ) : isInPractice ? (
@@ -1029,6 +1096,10 @@ export default function App() {
           isMuted={isMuted}
           letterHoldMs={letterHoldMs}
         />
+      )}
+
+      {gameOver && (
+        <Popup title={gameOver.title} detail={gameOver.detail} onDismiss={dismissGameOver} />
       )}
 
       <div className="control-hints" aria-live="polite">
