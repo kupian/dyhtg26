@@ -5,6 +5,13 @@ class RoomState(Enum):
     WAITING = "WAITING"
     PLAYING = "PLAYING"
     FINISHED = "FINISHED"
+
+class RoomType(Enum):
+    CHAT = "chat"
+    PVP = "pvp"
+
+class CreateRoomRequest(BaseModel):
+    room_type : RoomType
 class CreateRoomResponse(BaseModel):
     room_code: str
     player_id: UUID
@@ -12,6 +19,7 @@ class JoinRoomRequest(BaseModel):
     room_code: str
 
 class JoinRoomResponse(BaseModel):
+    room_type: RoomType
     room_code: str
     player_id: UUID
 

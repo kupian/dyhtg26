@@ -1,4 +1,4 @@
-import type { GameMode, RoomMode, TitleKey } from "./types";
+import type { GameMode, RoomMode, RoomType, TitleKey } from "./types";
 
 export type MenuItemId = "pvp" | "chat" | "practice" | "learn" | "settings";
 /** `title` is shown (and coloured) in the title bar while the item is highlighted. */
@@ -48,3 +48,10 @@ export const TITLE_WORD: Record<TitleKey, string> = {
 
 export const isRoomMode = (mode: GameMode | undefined): mode is RoomMode =>
   mode === "duel" || mode === "chat";
+
+/** The server's name for each room mode: the menu's DUEL is a "pvp" room. */
+const ROOM_TYPE: Record<RoomMode, RoomType> = { duel: "pvp", chat: "chat" };
+const ROOM_MODE: Record<RoomType, RoomMode> = { pvp: "duel", chat: "chat" };
+
+export const roomTypeOf = (mode: RoomMode): RoomType => ROOM_TYPE[mode];
+export const roomModeOf = (type: RoomType): RoomMode => ROOM_MODE[type];

@@ -13,11 +13,17 @@ export const MORSE_MAP: Record<string, string> = {
 /** Mirrors server RoomState (server/src/server/models.py). */
 export type RoomState = "WAITING" | "PLAYING" | "FINISHED";
 
+/** Mirrors server RoomType (server/src/server/models.py): what kind of room the server made. */
+export type RoomType = "chat" | "pvp";
+
 /** Broadcast on the game socket by ConnectionManager.notify_state_change_all. */
 export type StateChangeMessage = { state: RoomState };
 
 /** Sent on the game socket when the opponent types (ConnectionManager.update_opponents_sentence). */
 export type OpponentTypedMessage = { opponent_morse: string; opponent_ascii: string };
+
+/** Sent on the game socket with the opponent's ready state (ConnectionManager._send_opponent_ready_state). */
+export type OpponentReadyMessage = { opponent_ready: boolean };
 
 export type SocketStatus = "connecting" | "open" | "closed";
 
@@ -63,6 +69,7 @@ export type LobbyProps = {
 };
 
 export interface RoomProps {
+  /** From the server's room_type, not the menu item picked: it decides which UI is shown. */
   mode: RoomMode;
   roomCode: RoomCode;
   isHost: boolean;
@@ -70,10 +77,14 @@ export interface RoomProps {
   socketStatus: SocketStatus;
   typed: TypedMessage;
   opponentTyped: TypedMessage;
+  /** Duel only: the sentence both players race to send, once fetched from /sentence. */
+  targetSentence: string | null;
   /** A dot/dash was just sent by you / your opponent: light that cursor. */
   isYouSignalOn: boolean;
   isOpponentSignalOn: boolean;
   isReady: boolean;
   isReadying: boolean;
+  /** null until the server first reports the opponent's ready state. */
+  isOpponentReady: boolean | null;
   onReady: () => void;
 }
