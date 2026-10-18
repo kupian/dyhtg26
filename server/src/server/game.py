@@ -3,7 +3,7 @@ from uuid import UUID, uuid4
 from server.exceptions import RoomError, GameError, PlayerError
 import server.morse as morse
 from server.sockets import ConnectionManager
-from server.models import RoomState
+from server.models import RoomState, RoomType
 
 """
 MAGIC NUMBERS
@@ -102,7 +102,10 @@ class Room:
         self.players : dict[UUID, Player] = {}
         self.connections = ConnectionManager()
         self.room_state = RoomState.WAITING
-        self.current_sentence : Sentence | None = None
+        self.current_sentence : Sentence | None = None\
+
+    def get_type(self):
+            return RoomType.CHAT
 
     def generate_new_sentence(self):
         # TODO: implement this
@@ -162,16 +165,19 @@ class Room:
         else:
             raise RoomError("Room cannot be started now")
 
+class ChatRoom(Room):
+    pass
+
 class GameManager():
     def __init__(self):
         self.rooms = {}
 
-    def create_room(self) -> str:
+    def create_room(self, room_type:RoomType) -> str:
         if len(self.rooms) >= MAX_ROOMS:
             raise GameError("Room limit reached")
 
         room_code = get_room_code(len(self.rooms))
-        r = Room(room_code)
+        r = ChatRoom(room_code)
         self.rooms[room_code] = r
         return room_code
 

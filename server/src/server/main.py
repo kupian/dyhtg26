@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from server.game import GameManager, Room
-from server.models import *
+from server.models import CreateRoomRequest, CreateRoomResponse, JoinRoomRequest, JoinRoomResponse, ReadyRequest, ReadyResponse, SentenceRequest, SentenceResponse, KeystrokeRequest, KeystrokeResponse, ErrorResponse, RoomType
 from server.exceptions import GameError, RoomError, PlayerError
 from fastapi.middleware.cors import CORSMiddleware
 from server.sockets import ConnectionManager
@@ -25,25 +25,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 @app.exception_handler(GameError)
 async def game_error_handler(request: Request, exc: GameError):
     return JSONResponse(status_code=409, content={"error": str(exc)})
-
-@app.get("/")
-def read_root():
-    return {"Hello": "World"}
 
 @app.post(
     "/create-room",
     summary="Create a new game room and join as Player 1",
     responses={409: {"model": ErrorResponse, "description": "Error creating room"}},
 )
-def create_room() -> CreateRoomResponse:
+def create_room(body: CreateRoomRequest) -> JoinRoomResponse:
     """Creates a room and returns its room code."""
-    room_code = gm.create_room()
+    room_code = gm.create_room(body.room_type)
     player_id = gm.join_room(room_code)
-    return CreateRoomResponse(room_code=room_code,
+    return JoinRoomResponse(room_type=body.room_type, room_code=room_code,
                               player_id=player_id)
 
 @app.post(
@@ -53,7 +48,8 @@ def create_room() -> CreateRoomResponse:
 )
 def join_room(body: JoinRoomRequest) -> JoinRoomResponse:
     """Joins a room and returns the player's generated ID"""
-    return JoinRoomResponse(room_code=body.room_code,
+    room = gm.get_room(body.room_code)
+    return JoinRoomResponse(room_type=room.get_type(), room_code=body.room_code,
                             player_id=gm.join_room(body.room_code))
 
 @app.post(
