@@ -18,8 +18,7 @@ lan_origin_regex = r"http://(10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost", "http://localhost:5173"],
-    allow_credentials=True,
+    allow_origins=["http://localhost", "http://138.68.179.160", "http://clancarr.com/"]    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
