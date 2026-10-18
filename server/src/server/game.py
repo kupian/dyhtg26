@@ -1,9 +1,10 @@
 from math import log2, ceil
 from uuid import UUID, uuid4
-from server.exceptions import RoomError, GameError, PlayerError
+from server.exceptions import RoomError, GameError, PlayerError, ConnectionError
 import server.morse as morse
 from server.sockets import ConnectionManager
 from server.models import RoomState, RoomType
+
 
 """
 MAGIC NUMBERS
@@ -121,6 +122,11 @@ class Room:
             raise RoomError("Player does not exist")
         return player
 
+    def remove_player(self, player_id: UUID):
+        if self.players.get(player_id) is None:
+            raise RoomError("That player is not in the room")
+        self.players.pop(player_id)
+
     def get_opponent_uuid(self, player_id: UUID) -> UUID | None:
         others = [pid for pid in self.players if pid != player_id]
         return others[0] if others else None
@@ -150,11 +156,25 @@ class Room:
             pass # Opponent is not yet connected to the websocket
 
     async def on_player_connected(self, player_id: UUID):
-        """Swap ready states with the opponent, if there is one"""
+        """Swap connection and ready states with the opponent, if there is one"""
+        await self.connections._broadcast_player_connect(player_id) # opponent learns we've joined
         opponent_id = self.get_opponent_uuid(player_id)
         if opponent_id is not None:
-            await self.send_ready_state_to_opponent(player_id)    # opponent learns we've joined
+            if self.connections.is_connected(opponent_id):
+                # Goes to everyone but the opponent, i.e. us: we learn they are here
+                await self.connections._broadcast_player_connect(opponent_id)
+            await self.send_ready_state_to_opponent(player_id)    # opponent learns our ready state
             await self.send_ready_state_to_opponent(opponent_id)  # we learn if they're ready
+
+    async def on_player_disconnected(self, player_id: UUID):
+        """Forget the player's socket and tell the opponent they've gone"""
+        self.connections.disconnect(player_id)
+        await self.connections._broadcast_player_disconnect(player_id)
+        if self.room_state == RoomState.WAITING:
+            self.remove_player(player_id)
+        else:
+            self.room_state = RoomState.FINISHED
+            await self.connections.broadcast_state_change(self.room_state)
 
     async def type_character(self, player_id: UUID, symbol: str):
         player = self.get_player(player_id)
@@ -170,7 +190,6 @@ class Room:
                 player.get_typed_ascii()
             )
         except ConnectionError:
-            # TODO: figure out what happens if the other player disconnects mid-session
             pass
 
     def get_player_count(self):

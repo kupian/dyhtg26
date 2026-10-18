@@ -6,7 +6,7 @@ export type MenuItem = { id: MenuItemId; label: string; title: TitleKey; mode?: 
 
 /** Main menu. Items with a room mode expand into SUBMENU_ITEMS when selected. */
 export const MENU_ITEMS: MenuItem[] = [
-  { id: "pvp", label: "PVP", title: "duel", mode: "duel" },
+  { id: "pvp", label: "PVP (COMING SOON)", title: "duel", mode: "duel" },
   { id: "chat", label: "CHAT", title: "chat", mode: "chat" },
   { id: "practice", label: "PRACTICE", title: "practice", mode: "practice" },
   { id: "learn", label: "LEARN", title: "learn" },
@@ -20,6 +20,8 @@ export const SUBMENU_ITEMS = [
 
 export const SETTINGS_ITEMS = [
   { id: "sound", label: "SOUND" },
+  { id: "music", label: "MUSIC" },
+  { id: "musicVolume", label: "MUSIC VOLUME" },
   { id: "letterHold", label: "LETTER HOLD" },
   { id: "testDot", label: "TEST DOT" },
   { id: "testDash", label: "TEST DASH" },
@@ -34,6 +36,17 @@ const LETTER_HOLD_STEP_MS = 100;
 /** Next letter-hold setting, wrapping from the maximum back to the minimum. */
 export const nextLetterHoldMs = (ms: number) =>
   ms >= LETTER_HOLD_MAX_MS ? LETTER_HOLD_MIN_MS : ms + LETTER_HOLD_STEP_MS;
+
+// "Music volume": background music level, 0.1–1.0 in 0.1 steps. Kept in tenths to avoid float drift.
+export const DEFAULT_MUSIC_VOLUME_TENTHS = 5;
+const MUSIC_VOLUME_MIN_TENTHS = 1;
+const MUSIC_VOLUME_MAX_TENTHS = 10;
+
+/** Next music volume setting, wrapping from the maximum back to the minimum. */
+export const nextMusicVolumeTenths = (tenths: number) =>
+  tenths >= MUSIC_VOLUME_MAX_TENTHS ? MUSIC_VOLUME_MIN_TENTHS : tenths + 1;
+
+export const formatVolume = (tenths: number) => (tenths / 10).toFixed(1);
 
 export const formatSeconds = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
 

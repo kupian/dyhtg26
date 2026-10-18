@@ -17,8 +17,20 @@ export default function Room({
   isReady,
   isReadying,
   isOpponentReady,
+  isOpponentConnected,
   onReady,
 }: RoomProps) {
+  const hasOpponentLeft = isOpponentConnected === false;
+  const isOpponentHere = isOpponentConnected === true;
+  const opponentStatus =
+    isOpponentConnected === null
+      ? "WAITING…"
+      : hasOpponentLeft
+        ? "LEFT"
+        : isOpponentReady
+          ? "READY"
+          : "JOINED";
+
   return (
     <main className={`room mode-${mode}`}>
       {roomState === "WAITING" && (
@@ -37,13 +49,15 @@ export default function Room({
                 {isReady ? "READY" : "NOT READY"}
               </span>
             </div>
-            <div className="player-card">
+            <div className={`player-card ${isOpponentHere ? "" : "is-away"}`}>
               <div className="player-card-header">
                 <span className="player-name">OPPONENT</span>
                 {!isHost && <span className="badge host">HOST</span>}
               </div>
-              <span className={`player-status ${isOpponentReady ? "ready" : ""}`}>
-                {isOpponentReady === null ? "WAITING…" : isOpponentReady ? "READY" : "NOT READY"}
+              <span
+                className={`player-status ${isOpponentHere && isOpponentReady ? "ready" : ""} ${hasOpponentLeft ? "left" : ""}`}
+              >
+                {opponentStatus}
               </span>
             </div>
           </div>
@@ -56,13 +70,17 @@ export default function Room({
           >
             {isReady ? "READY ✓" : isReadying ? "READYING…" : "READY UP"}
           </button>
-          {isReady && isOpponentReady !== true && <p className="hint">Waiting for your opponent…</p>}
-          {!isReady && isOpponentReady === true && <p className="hint">Your opponent is ready!</p>}
         </section>
       )}
 
+      {roomState === "PLAYING" && hasOpponentLeft && (
+        <p className="room-notice" role="status">
+          OPPONENT LEFT
+        </p>
+      )}
+
       {roomState === "PLAYING" && mode === "duel" && (
-        <section className="lanes">
+        <section className={`lanes ${hasOpponentLeft ? "opponent-left" : ""}`}>
           {targetSentence === null ? (
             <p className="hint">LOADING SENTENCE…</p>
           ) : (
@@ -87,7 +105,7 @@ export default function Room({
       )}
 
       {roomState === "PLAYING" && mode === "chat" && (
-        <section className="lanes">
+        <section className={`lanes ${hasOpponentLeft ? "opponent-left" : ""}`}>
           <MessageLane
             label="OPPONENT"
             typed={opponentTyped}

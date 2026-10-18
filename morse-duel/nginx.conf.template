@@ -4,11 +4,23 @@ map $http_upgrade $connection_upgrade {
     ''      close;
 }
 
+# Plain HTTP just redirects to HTTPS.
 server {
     listen 80;
-    server_name morse.clancarr.com 138.68.179.160 localhost;
+    server_name ${DOMAIN};
+    return 301 https://${DOMAIN}$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name ${DOMAIN};
     root /usr/share/nginx/html;
     index index.html;
+
+    # Let's Encrypt certs are bind-mounted from the host's CERT_DIR at runtime (see compose.yaml).
+    ssl_certificate     /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
 
     location / {
         try_files $uri $uri/ /index.html;
