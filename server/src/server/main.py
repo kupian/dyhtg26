@@ -10,15 +10,23 @@ from uuid import UUID
 app = FastAPI()
 gm = GameManager()
 
+# In production nginx serves the front-end and proxies /api/ to this server on the
+# same origin, so CORS doesn't apply. These cover local dev and direct :8000 access.
 origins = [
+    "http://localhost",
     "http://localhost:8080",
+    "http://138.68.179.160",
+    "http://morse.clancarr.com",
+    "https://morse.clancarr.com",
 ]
 # Front-end served from this machine's LAN address (10.x, 172.16-31.x, 192.168.x)
 lan_origin_regex = r"http://(10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|192\.168\.\d+\.\d+):8080"
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost", "http://138.68.179.160", "http://clancarr.com/"]    allow_credentials=True,
+    allow_origins=origins,
+    allow_origin_regex=lan_origin_regex,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )

@@ -8,6 +8,10 @@ COPY package*.json ./
 RUN npm ci
 
 COPY . .
+# Call the backend through nginx's same-origin /api/ proxy (see nginx.conf),
+# so the browser never makes a cross-origin request.
+ARG VITE_API_URL=/api
+ENV VITE_API_URL=$VITE_API_URL
 RUN npm run build
 
 # ---- Production stage ----
