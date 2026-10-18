@@ -7,6 +7,7 @@ import {
 } from "react";
 import type {
   KeySymbol,
+  OpponentReadyMessage,
   OpponentTypedMessage,
   RoomCode,
   RoomMode,
@@ -28,6 +29,8 @@ import {
   TITLE_WORD,
   isRoomMode,
   nextLetterHoldMs,
+  roomModeOf,
+  roomTypeOf,
 } from "./menu";
 import { decodeMorse } from "./morse";
 import Lobby from "./component/Lobby";
@@ -70,10 +73,14 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [isReady, setIsReady] = useState(false);
   const [isReadying, setIsReadying] = useState(false);
+  // The other player's ready state, pushed over the game socket; null until first heard.
+  const [isOpponentReady, setIsOpponentReady] = useState<boolean | null>(null);
   // Latest typed message from /keystroke (or decoded locally in practice mode).
   const [typed, setTyped] = useState<TypedMessage>(EMPTY_TYPED);
   // Opponent's typed message, pushed over the game socket as they type.
   const [opponentTyped, setOpponentTyped] = useState<TypedMessage>(EMPTY_TYPED);
+  // Duel rooms: the sentence to send, fetched once the room starts playing.
+  const [targetSentence, setTargetSentence] = useState<string | null>(null);
   const [isInPractice, setIsInPractice] = useState(false);
   // Title word in the menu: follows the highlighted menu item.
   const [titleKey, setTitleKey] = useState<TitleKey>(MENU_ITEMS[0].title);
@@ -218,6 +225,7 @@ export default function App() {
         let msg:
           | StateChangeMessage
           | OpponentTypedMessage
+          | OpponentReadyMessage
           | Record<string, unknown>;
         try {
           msg = JSON.parse(ev.data);
@@ -228,6 +236,10 @@ export default function App() {
 
         if ("state" in msg && typeof msg.state === "string") {
           setRoomState(msg.state as RoomState);
+        }
+
+        if ("opponent_ready" in msg && typeof msg.opponent_ready === "boolean") {
+          setIsOpponentReady(msg.opponent_ready);
         }
 
         if (
@@ -259,17 +271,21 @@ export default function App() {
     [log, flashSignal, isMuted],
   );
 
+  /** Enter the room the server put us in; its room_type, not the menu pick, sets the mode. */
   const enterRoom = useCallback(
-    (code: string, playerId: string, isHost: boolean, mode: RoomMode) => {
-      const roomCode = code as RoomCode;
-      setSession({ roomCode, playerId, isHost, mode });
+    (data: api.JoinRoomResponse, isHost: boolean) => {
+      const roomCode = data.room_code as RoomCode;
+      const mode = roomModeOf(data.room_type);
+      setSession({ roomCode, playerId: data.player_id, isHost, mode });
       setRoomState("WAITING");
       setSocketStatus("closed");
       resetTyping();
+      setTargetSentence(null);
       setError(null);
       setIsReady(false);
       setIsReadying(false);
-      connect(roomCode, playerId);
+      setIsOpponentReady(null);
+      connect(roomCode, data.player_id);
     },
     [connect, resetTyping],
   );
@@ -280,9 +296,12 @@ export default function App() {
       setIsLoading(true);
       setError(null);
       try {
-        const data = await api.createRoom();
-        log(`← created room ${data.room_code} as ${data.player_id}`);
-        enterRoom(data.room_code, data.player_id, true, mode);
+        const data = await api.createRoom(roomTypeOf(mode));
+        log(`← created ${data.room_type} room ${data.room_code} as ${data.player_id}`);
+        if (data.room_type !== roomTypeOf(mode)) {
+          log(`asked for a ${roomTypeOf(mode)} room, server made ${data.room_type}`);
+        }
+        enterRoom(data, true);
         sound.playMenu(isMuted);
       } catch (err) {
         console.error("createRoom failed", err);
@@ -306,8 +325,11 @@ export default function App() {
       setError(null);
       try {
         const data = await api.joinRoom(code);
-        log(`← joined room ${data.room_code} as ${data.player_id}`);
-        enterRoom(data.room_code, data.player_id, false, mode);
+        log(`← joined ${data.room_type} room ${data.room_code} as ${data.player_id}`);
+        if (data.room_type !== roomTypeOf(mode)) {
+          log(`joined from ${mode}, but the room is ${data.room_type}`);
+        }
+        enterRoom(data, false);
         setIsJoining(false);
         setJoinCode("");
         sound.playMenu(isMuted);
@@ -357,9 +379,11 @@ export default function App() {
     setSocketStatus("closed");
     setRoomState("WAITING");
     resetTyping();
+    setTargetSentence(null);
     setError(null);
     setIsReady(false);
     setIsReadying(false);
+    setIsOpponentReady(null);
     setIsJoining(false);
     setJoinCode("");
     sound.playMenu(isMuted);
@@ -381,6 +405,26 @@ export default function App() {
       setIsReadying(false);
     }
   }, [session, isReady, isReadying, log, isMuted]);
+
+  // Duel rooms race to send a sentence; fetch it once the room starts.
+  const sessionMode = session?.mode;
+  const sessionRoomCode = session?.roomCode;
+  useEffect(() => {
+    if (sessionMode !== "duel" || !sessionRoomCode || roomState !== "PLAYING") return;
+    let isStale = false;
+    log("→ POST /sentence");
+    api
+      .getSentence(sessionRoomCode)
+      .then((data) => {
+        if (isStale) return;
+        log(`← sentence: ${data.sentence}`);
+        setTargetSentence(data.sentence);
+      })
+      .catch((err) => log(`✗ /sentence: ${api.describeError(err)}`));
+    return () => {
+      isStale = true;
+    };
+  }, [sessionMode, sessionRoomCode, roomState, log]);
 
   // --- Typing (in a room, or practice mode) -------------------------------------
   // Dots/dashes are sent as typed. A letter is finished (NEWCHAR) by holding its last
@@ -956,10 +1000,12 @@ export default function App() {
           socketStatus={socketStatus}
           typed={typed}
           opponentTyped={opponentTyped}
+          targetSentence={targetSentence}
           isYouSignalOn={isYouSignalOn}
           isOpponentSignalOn={isOpponentSignalOn}
           isReady={isReady}
           isReadying={isReadying}
+          isOpponentReady={isOpponentReady}
           onReady={readyUp}
         />
       ) : isInPractice ? (
