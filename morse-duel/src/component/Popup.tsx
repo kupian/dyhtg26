@@ -1,6 +1,6 @@
 type PopupProps = {
   title: string;
-  detail: string;
+  detail?: string;
   onDismiss: () => void;
 };
 
@@ -8,13 +8,20 @@ type PopupProps = {
 export default function Popup({ title, detail, onDismiss }: PopupProps) {
   return (
     <div className="popup-backdrop" onClick={onDismiss}>
-      <div className="popup" role="alertdialog" aria-labelledby="popup-title" aria-describedby="popup-detail">
+      <div
+        className="popup"
+        role="alertdialog"
+        aria-labelledby="popup-title"
+        aria-describedby={detail ? "popup-detail" : undefined}
+      >
         <h2 id="popup-title" className="popup-title">
           {title}
         </h2>
-        <p id="popup-detail" className="popup-detail">
-          {detail}
-        </p>
+        {detail && (
+          <p id="popup-detail" className="popup-detail">
+            {detail}
+          </p>
+        )}
         <p className="popup-hint">PRESS ANY BUTTON</p>
       </div>
     </div>

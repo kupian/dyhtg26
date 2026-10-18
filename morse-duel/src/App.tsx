@@ -62,8 +62,9 @@ const DASH_FLASH_MS = 360;
 // Room codes are 4 dots/dashes (ROOM_CODES in server/src/server/game.py)
 const ROOM_CODE_LENGTH = 4;
 const JOIN_INVALID_FLASH_MS = 700;
-// Presses this soon after the game-over popup opens don't close it.
-const GAME_OVER_MIN_MS = 600;
+// Presses this soon after the game-over popup opens don't close it: a player mid-sentence
+// keeps tapping for a moment, and would otherwise close it before they'd read it.
+const GAME_OVER_MIN_MS = 1500;
 
 const isDotKey = (key: string) =>
   key === "." || key === "z" || key === "Z" || key === "ArrowLeft";
@@ -86,7 +87,7 @@ export default function App() {
   // Shown over the menu after the server ends a game; any button closes it.
   const [gameOver, setGameOver] = useState<{
     title: string;
-    detail: string;
+    detail?: string;
     shownAt: number;
   } | null>(null);
   // Latest typed message from /keystroke (or decoded locally in practice mode).
@@ -255,7 +256,7 @@ export default function App() {
       exitRoom();
       setGameOver({
         title: hasOpponentLeft ? "OPPONENT LEFT" : "GAME OVER",
-        detail: hasOpponentLeft ? "Your opponent disconnected, so the game is over." : "The game has finished.",
+        detail: hasOpponentLeft ? undefined : "The game has finished.",
         shownAt: Date.now(),
       });
     },
