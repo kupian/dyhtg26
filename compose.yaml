@@ -7,6 +7,7 @@ services:
       - "8000:8000"
     environment:
       - PORT=8000
+      - CORS_ORIGINS=${CORS_ORIGINS:-}
     restart: unless-stopped
 
   frontend:
@@ -15,6 +16,13 @@ services:
       dockerfile: Dockerfile
     ports:
       - "80:80"
+      - "443:443"
+    # DOMAIN and CERT_DIR come from .env (copy .env.example to get started).
+    environment:
+      - DOMAIN=${DOMAIN:?set DOMAIN in .env}
+    volumes:
+      # Mount the whole dir: live/ contains symlinks into archive/.
+      - ${CERT_DIR:-/etc/letsencrypt}:/etc/letsencrypt:ro
     depends_on:
       - server
     restart: unless-stopped

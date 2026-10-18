@@ -1,3 +1,4 @@
+import os
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from server.game import GameManager, Room, ChatRoom, PvpRoom
@@ -12,12 +13,11 @@ gm = GameManager()
 
 # In production nginx serves the front-end and proxies /api/ to this server on the
 # same origin, so CORS doesn't apply. These cover local dev and direct :8000 access.
+# Deployment-specific origins come from CORS_ORIGINS (comma-separated, set in .env).
 origins = [
     "http://localhost",
     "http://localhost:8080",
-    "http://138.68.179.160",
-    "http://morse.clancarr.com",
-    "https://morse.clancarr.com",
+    *(o.strip() for o in os.environ.get("CORS_ORIGINS", "").split(",") if o.strip()),
 ]
 # Front-end served from this machine's LAN address (10.x, 172.16-31.x, 192.168.x)
 lan_origin_regex = r"http://(10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|192\.168\.\d+\.\d+):8080"
