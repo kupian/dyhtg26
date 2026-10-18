@@ -1,6 +1,7 @@
 import type { RoomProps } from "../types";
-import { prettyMorse } from "../morse";
+import { correctPrefixLength, prettyMorse, sentLetters } from "../morse";
 import MessageLane from "./MessageLane";
+import TargetSentence from "./TargetSentence";
 
 export default function Room({
   mode,
@@ -10,10 +11,12 @@ export default function Room({
   socketStatus,
   typed,
   opponentTyped,
+  targetSentence,
   isYouSignalOn,
   isOpponentSignalOn,
   isReady,
   isReadying,
+  isOpponentReady,
   onReady,
 }: RoomProps) {
   return (
@@ -39,7 +42,9 @@ export default function Room({
                 <span className="player-name">OPPONENT</span>
                 {!isHost && <span className="badge host">HOST</span>}
               </div>
-              <span className="player-status">WAITING…</span>
+              <span className={`player-status ${isOpponentReady ? "ready" : ""}`}>
+                {isOpponentReady === null ? "WAITING…" : isOpponentReady ? "READY" : "NOT READY"}
+              </span>
             </div>
           </div>
 
@@ -51,11 +56,37 @@ export default function Room({
           >
             {isReady ? "READY ✓" : isReadying ? "READYING…" : "READY UP"}
           </button>
-          {isReady && <p className="hint">Waiting for your opponent…</p>}
+          {isReady && isOpponentReady !== true && <p className="hint">Waiting for your opponent…</p>}
+          {!isReady && isOpponentReady === true && <p className="hint">Your opponent is ready!</p>}
         </section>
       )}
 
-      {roomState === "PLAYING" && (
+      {roomState === "PLAYING" && mode === "duel" && (
+        <section className="lanes">
+          {targetSentence === null ? (
+            <p className="hint">LOADING SENTENCE…</p>
+          ) : (
+            <>
+              <DuelProgress
+                label="YOU"
+                tone="you"
+                done={correctPrefixLength(targetSentence, sentLetters(typed))}
+                total={targetSentence.length}
+              />
+              <DuelProgress
+                label="OPPONENT"
+                tone="opponent"
+                done={correctPrefixLength(targetSentence, sentLetters(opponentTyped))}
+                total={targetSentence.length}
+              />
+              <TargetSentence sentence={targetSentence} typed={typed} />
+            </>
+          )}
+          <MessageLane label="YOU" typed={typed} anchor="center" tone="you" isSignalOn={isYouSignalOn} />
+        </section>
+      )}
+
+      {roomState === "PLAYING" && mode === "chat" && (
         <section className="lanes">
           <MessageLane
             label="OPPONENT"
@@ -70,5 +101,28 @@ export default function Room({
 
       {roomState === "FINISHED" && <p className="room-finished">TRANSMISSION COMPLETE</p>}
     </main>
+  );
+}
+
+/** How far through the target sentence a player is. */
+function DuelProgress({
+  label,
+  tone,
+  done,
+  total,
+}: {
+  label: string;
+  tone: "you" | "opponent";
+  done: number;
+  total: number;
+}) {
+  return (
+    <div className={`duel-progress lane-${tone}`}>
+      <span className="lane-label">{label}</span>
+      <progress className="duel-progress-bar" value={done} max={total} aria-label={`${label} progress`} />
+      <span className="duel-progress-count">
+        {done}/{total}
+      </span>
+    </div>
   );
 }

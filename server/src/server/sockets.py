@@ -29,11 +29,31 @@ class ConnectionManager:
     #async def send_personal_message(self, message: str, websocket: WebSocket):
     #    await websocket.send_text(message)
 
-    async def notify_state_change_all(self, state: RoomState):
+    async def broadcast_state_change(self, state: RoomState):
         for c in self.active_connections.values():
             await c.websocket.send_json({
                 "state": state.value
             })
+
+    async def _broadcast_player_disconnect(self, player_id: UUID):
+        pass
+
+    async def _send_opponent_ready_state(self, player_id: UUID, opponent_ready_state: bool):
+        """Send a player their opponent's ready state
+
+        Args:
+            player_id (UUID): Player to receive the notification
+            opponent_ready_state (bool): Ready state of the player's opponent
+
+        Raises:
+            ConnectionError: Raised if the player is not connected
+        """
+        c = self.active_connections.get(player_id)
+        if not c:
+            raise ConnectionError("Player is not connected")
+        await c.websocket.send_json({
+            "opponent_ready": opponent_ready_state
+        })
 
     async def update_opponents_sentence(self, player_id: UUID, morse_sentence: str, ascii_sentence: str):
         await self.get_connection(player_id).websocket.send_json({
