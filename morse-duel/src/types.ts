@@ -69,6 +69,8 @@ export type LobbyProps = {
   settingsIndex: number;
   onSettingClick: (index: number) => void;
   isMuted: boolean;
+  isMusicOn: boolean;
+  musicVolumeTenths: number;
   letterHoldMs: number;
 };
 

@@ -1,6 +1,6 @@
 import type { LobbyProps } from "../types";
 import { MORSE_MAP } from "../types";
-import { MENU_ITEMS, SETTINGS_ITEMS, SUBMENU_ITEMS, formatSeconds } from "../menu";
+import { MENU_ITEMS, SETTINGS_ITEMS, SUBMENU_ITEMS, formatSeconds, formatVolume } from "../menu";
 import { prettyMorse } from "../morse";
 
 // Object key order puts "0"–"9" first; show A–Z, then digits.
@@ -24,6 +24,8 @@ export default function Lobby({
   settingsIndex,
   onSettingClick,
   isMuted,
+  isMusicOn,
+  musicVolumeTenths,
   letterHoldMs,
 }: LobbyProps) {
   // Chart and settings replace the menu in place, so the pads stay usable.
@@ -59,6 +61,10 @@ export default function Lobby({
               {item.id === "sound" && (
                 <span className={`setting-value ${isMuted ? "off" : "on"}`}>{isMuted ? "OFF" : "ON"}</span>
               )}
+              {item.id === "music" && (
+                <span className={`setting-value ${isMusicOn ? "on" : "off"}`}>{isMusicOn ? "ON" : "OFF"}</span>
+              )}
+              {item.id === "musicVolume" && <span className="setting-value">{formatVolume(musicVolumeTenths)}</span>}
               {item.id === "letterHold" && <span className="setting-value">{formatSeconds(letterHoldMs)}</span>}
             </div>
           ))}

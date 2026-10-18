@@ -1,18 +1,22 @@
 import dotSoundUrl from "./assets/sounds/dot.mp3";
 import dashSoundUrl from "./assets/sounds/dash.mp3";
 import menuSoundUrl from "./assets/sounds/menu.mp3";
+import bgMusicUrl from "./assets/sounds/bgmusic.mp3";
 
 class SoundManager {
   private audioCtx: AudioContext | null = null;
   private dotAudio: HTMLAudioElement | null = null;
   private dashAudio: HTMLAudioElement | null = null;
   private menuAudio: HTMLAudioElement | null = null;
+  private musicAudio: HTMLAudioElement | null = null;
 
   constructor() {
     try {
       this.dotAudio = new Audio(dotSoundUrl);
       this.dashAudio = new Audio(dashSoundUrl);
       this.menuAudio = new Audio(menuSoundUrl);
+      this.musicAudio = new Audio(bgMusicUrl);
+      this.musicAudio.loop = true;
     } catch {
       // Audio element not supported, will use Web Audio API fallback
     }
@@ -90,6 +94,18 @@ class SoundManager {
       });
     } else {
       this.playTone(520, 60);
+    }
+  }
+
+  /** Background music loops while enabled; it is only switched on from Settings, so autoplay is allowed. */
+  setMusic(enabled: boolean, volume: number) {
+    const music = this.musicAudio;
+    if (!music) return;
+    music.volume = Math.min(1, Math.max(0, volume));
+    if (enabled) {
+      if (music.paused) music.play().catch(() => {});
+    } else {
+      music.pause();
     }
   }
 

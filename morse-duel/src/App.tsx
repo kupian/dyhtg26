@@ -24,12 +24,14 @@ import * as api from "./api";
 import { sound } from "./sound";
 import {
   DEFAULT_LETTER_HOLD_MS,
+  DEFAULT_MUSIC_VOLUME_TENTHS,
   MENU_ITEMS,
   SETTINGS_ITEMS,
   SUBMENU_ITEMS,
   TITLE_WORD,
   isRoomMode,
   nextLetterHoldMs,
+  nextMusicVolumeTenths,
   roomModeOf,
   roomTypeOf,
 } from "./menu";
@@ -99,12 +101,20 @@ export default function App() {
 
   // --- Audio / design state -------------------------------------------------
   const [isMuted, setIsMuted] = useState(false);
+  // Background music: off by default, volume 0.1–1.0 (Settings). Silenced while muted.
+  const [isMusicOn, setIsMusicOn] = useState(false);
+  const [musicVolumeTenths, setMusicVolumeTenths] = useState(DEFAULT_MUSIC_VOLUME_TENTHS);
   // Hold the last dot/dash this long to finish a letter (Settings: 0.1–0.5s).
   const [letterHoldMs, setLetterHoldMs] = useState(DEFAULT_LETTER_HOLD_MS);
   const [isFlashlightOn, setIsFlashlightOn] = useState(false);
   // Cursor flashes while typing: your dot/dash, and the opponent's.
   const [isYouSignalOn, setIsYouSignalOn] = useState(false);
   const [isOpponentSignalOn, setIsOpponentSignalOn] = useState(false);
+
+  // SOUND is the master switch: music only plays while sound is on and MUSIC is on.
+  useEffect(() => {
+    sound.setMusic(isMusicOn && !isMuted, musicVolumeTenths / 10);
+  }, [isMusicOn, isMuted, musicVolumeTenths]);
 
   // --- Menu navigation ------------------------------------------------------
   const [menuIndex, setMenuIndex] = useState(0);
@@ -689,6 +699,12 @@ export default function App() {
       if (id === "sound") {
         setIsMuted((m) => !m);
         sound.playMenu(false);
+      } else if (id === "music") {
+        setIsMusicOn((on) => !on);
+        sound.playMenu(isMuted);
+      } else if (id === "musicVolume") {
+        setMusicVolumeTenths(nextMusicVolumeTenths);
+        sound.playMenu(isMuted);
       } else if (id === "letterHold") {
         setLetterHoldMs(nextLetterHoldMs);
         sound.playMenu(isMuted);
@@ -1094,6 +1110,8 @@ export default function App() {
           settingsIndex={settingsIndex}
           onSettingClick={handleSettingClick}
           isMuted={isMuted}
+          isMusicOn={isMusicOn}
+          musicVolumeTenths={musicVolumeTenths}
           letterHoldMs={letterHoldMs}
         />
       )}
