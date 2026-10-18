@@ -8,6 +8,7 @@ COPY package*.json ./
 RUN npm ci
 
 COPY . .
+COPY /etc/letsencrypt/live/morse.clancarr.com/ /certs
 # Call the backend through nginx's same-origin /api/ proxy (see nginx.conf),
 # so the browser never makes a cross-origin request.
 ARG VITE_API_URL=/api

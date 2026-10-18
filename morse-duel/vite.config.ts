@@ -12,8 +12,8 @@ export default defineConfig({
     strictPort: true,
     host: 'dev.example.com',
     https: {
-      key: fs.readFileSync('/etc/letsencrypt/live/dev.example.com/privkey.pem'),
-      cert: fs.readFileSync('/etc/letsencrypt/live/dev.example.com/fullchain.pem'),
+      key: fs.readFileSync('../certs/privkey.pem'),
+      cert: fs.readFileSync('../certs/fullchain.pem'),
     },
   },
 })
