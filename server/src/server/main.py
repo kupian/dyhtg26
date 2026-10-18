@@ -120,4 +120,7 @@ async def websocket_endpoint(websocket: WebSocket, room_code: str, player_id: st
         while True:
             data = await websocket.receive_text()
     except WebSocketDisconnect:
-        room.connections.disconnect(player_uuid)
+        pass
+    finally:
+        # Also runs if the handler fails, so a dead socket is never left registered
+        await room.on_player_disconnected(player_uuid)

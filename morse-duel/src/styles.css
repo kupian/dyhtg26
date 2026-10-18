@@ -505,6 +505,15 @@ button:disabled {
   color: var(--success);
 }
 
+.player-status.left {
+  color: var(--wrong);
+}
+
+/* No opponent in the room (yet, or any more) */
+.player-card.is-away .player-name {
+  color: var(--text-muted);
+}
+
 .badge {
   font-size: 0.6rem;
   font-weight: 800;
@@ -516,6 +525,76 @@ button:disabled {
 .badge.host {
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.room-notice {
+  margin: 0;
+  text-align: center;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  color: var(--wrong);
+}
+
+.lanes.opponent-left .lane-opponent {
+  opacity: 0.35;
+}
+
+/* ==========================================================================
+   Popup (game over): over everything; any button or tap closes it
+   ========================================================================== */
+.popup-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.6);
+  animation: popup-fade 0.18s ease-out;
+}
+
+.popup {
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 1.5rem 1.25rem;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--wrong) 45%, transparent);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  text-align: center;
+}
+
+.popup-title {
+  margin: 0;
+  font-size: 1.3rem;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  color: var(--wrong);
+}
+
+.popup-detail {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+
+.popup-hint {
+  margin: 0.4rem 0 0;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  color: var(--text-muted);
+}
+
+@keyframes popup-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .room-finished {
