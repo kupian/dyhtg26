@@ -24,3 +24,5 @@ To add a space you press both buttons.
 
 To finish a letter quickly you simply hold the last symbol of a letter. for example F is ..-. where to move to the next letter you hold the last . for around 0.2 seconds (changeable)
 These intuitive controls allow the typing experience to end up feeling very fluid.
+
+![Figma Schematic](https://github.com/kupian/dyhtg26/blob/77c7b1098001029f65cddfbdfb5654e8e581724f/figmaSchematic.png)
