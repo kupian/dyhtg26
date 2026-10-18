@@ -147,7 +147,7 @@ class Room:
                 opponent_id, self.get_player(player_id).ready
             )
         except ConnectionError:
-            pass # opponent is not yet connected to the websocket
+            pass # Opponent is not yet connected to the websocket
 
     async def on_player_connected(self, player_id: UUID):
         """Swap ready states with the opponent, if there is one"""

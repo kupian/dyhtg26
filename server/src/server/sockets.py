@@ -35,6 +35,9 @@ class ConnectionManager:
                 "state": state.value
             })
 
+    async def _broadcast_player_disconnect(self, player_id: UUID):
+        pass
+
     async def _send_opponent_ready_state(self, player_id: UUID, opponent_ready_state: bool):
         """Send a player their opponent's ready state
 
