@@ -654,6 +654,114 @@ button:disabled {
 }
 
 /* ==========================================================================
+   Duel: target sentence and each player's progress through it
+   ========================================================================== */
+.duel-progress {
+  display: grid;
+  grid-template-columns: 5.5rem 1fr 3.5rem;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.duel-progress .lane-label {
+  text-align: left;
+}
+
+.duel-progress-bar {
+  width: 100%;
+  height: 6px;
+  border: none;
+  border-radius: 3px;
+  overflow: hidden;
+  appearance: none;
+  background: var(--surface);
+}
+
+.duel-progress-bar::-webkit-progress-bar {
+  background: var(--surface);
+}
+
+.duel-progress-bar::-webkit-progress-value {
+  background: var(--tone);
+}
+
+.duel-progress-bar::-moz-progress-bar {
+  background: var(--tone);
+}
+
+.duel-progress-count {
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-align: right;
+  color: var(--text-muted);
+}
+
+.target {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.6rem 0;
+  padding: 0.75rem 0.5rem;
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.target-word {
+  display: inline-flex;
+}
+
+.target-letter {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 1.4rem;
+  padding: 0 0.1rem;
+  border-radius: 6px;
+}
+
+.target-letter.space {
+  min-width: 1rem;
+}
+
+.target-char {
+  font-size: 1.3rem;
+  font-weight: 800;
+  line-height: 1.1;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.target-morse {
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: color-mix(in srgb, var(--text-muted) 60%, transparent);
+}
+
+.target-letter.done .target-char,
+.target-letter.done .target-morse {
+  color: var(--success);
+}
+
+.target-letter.wrong .target-char,
+.target-letter.wrong .target-morse {
+  color: var(--wrong);
+}
+
+.target-letter.next {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.target-letter.next .target-char {
+  color: var(--text);
+}
+
+.target-letter.next .target-morse {
+  color: var(--accent);
+}
+
+/* ==========================================================================
    Control hints and hold-to-leave meter
    ========================================================================== */
 .control-hints {

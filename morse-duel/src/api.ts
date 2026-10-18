@@ -1,4 +1,4 @@
-import type { RoomCode, WireSymbol } from "./types";
+import type { RoomCode, RoomType, WireSymbol } from "./types";
 
 // --- Module scope: created once, not on every render -------------------------
 // Default to port 8000 on whatever host served the page, so a phone loading
@@ -8,8 +8,8 @@ const API_BASE: string =
 const WS_BASE = API_BASE.replace(/^http/, "ws"); // http→ws, https→wss
 const REQUEST_TIMEOUT_MS = 10_000;
 
-export type CreateRoomResponse = { room_code: string; player_id: string };
-export type JoinRoomResponse = { room_code: string; player_id: string };
+/** Both /create-room and /join-room reply with this (server JoinRoomResponse). */
+export type JoinRoomResponse = { room_type: RoomType; room_code: string; player_id: string };
 export type ReadyResponse = { message: string };
 export type SentenceResponse = { sentence: string };
 export type KeystrokeResponse = {
@@ -71,15 +71,27 @@ export function isUnreachable(err: unknown): boolean {
   return err instanceof TypeError || (err instanceof DOMException && err.name === "AbortError");
 }
 
-export const createRoom = () => postJSON<CreateRoomResponse>("/create-room");
+const ROOM_TYPES: readonly RoomType[] = ["chat", "pvp"];
+
+/** Reject a room type this client can't render, rather than showing the wrong UI. */
+function checkRoomType(data: JoinRoomResponse): JoinRoomResponse {
+  if (!ROOM_TYPES.includes(data.room_type)) {
+    throw new Error(`Unknown room type ${JSON.stringify(data.room_type)}`);
+  }
+  return data;
+}
+
+/** Ask for a room type; the reply's room_type is what the server actually created. */
+export const createRoom = (roomType: RoomType) =>
+  postJSON<JoinRoomResponse>("/create-room", { room_type: roomType }).then(checkRoomType);
 
 export const joinRoom = (roomCode: RoomCode) =>
-  postJSON<JoinRoomResponse>("/join-room", { room_code: roomCode });
+  postJSON<JoinRoomResponse>("/join-room", { room_code: roomCode }).then(checkRoomType);
 
 export const readyUp = (roomCode: RoomCode, playerId: string) =>
   postJSON<ReadyResponse>("/ready", { room_code: roomCode, player_id: playerId });
 
-/** Unused while the MVP is a free-typing chat room; kept for the sentence duel. */
+/** The target sentence of a playing room (shown in pvp rooms). */
 export const getSentence = (roomCode: RoomCode) =>
   postJSON<SentenceResponse>("/sentence", { room_code: roomCode });
 

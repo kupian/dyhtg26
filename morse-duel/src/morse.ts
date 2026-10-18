@@ -36,3 +36,18 @@ export function lettersOf({ ascii, morse }: TypedMessage): DisplayLetter[] {
 export function prettyMorse(morse: string): string {
   return morse.replace(/\./g, "·").replace(/-/g, "–");
 }
+
+/** Letters already finished (the one still being typed is left out), spaces as " ". */
+export function sentLetters(typed: TypedMessage): string[] {
+  return lettersOf(typed)
+    .filter((letter) => !letter.isPending)
+    .map((letter) => (letter.isSpace ? " " : letter.char.toLowerCase()));
+}
+
+/** How many letters of target have been sent correctly, in order from the start. */
+export function correctPrefixLength(target: string, sent: string[]): number {
+  const chars = [...target.toLowerCase()];
+  let i = 0;
+  while (i < sent.length && i < chars.length && sent[i] === chars[i]) i++;
+  return i;
+}

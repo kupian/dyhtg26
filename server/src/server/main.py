@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
-from server.game import GameManager, Room
-from server.models import CreateRoomRequest, CreateRoomResponse, JoinRoomRequest, JoinRoomResponse, ReadyRequest, ReadyResponse, SentenceRequest, SentenceResponse, KeystrokeRequest, KeystrokeResponse, ErrorResponse, RoomType
+from server.game import GameManager, Room, ChatRoom, PvpRoom
+from server.models import CreateRoomRequest, CreateRoomResponse, JoinRoomRequest, JoinRoomResponse, ReadyRequest, ReadyResponse, SentenceRequest, SentenceResponse, KeystrokeRequest, KeystrokeResponse, ErrorResponse, RoomType, RoomState
 from server.exceptions import GameError, RoomError, PlayerError
 from fastapi.middleware.cors import CORSMiddleware
 from server.sockets import ConnectionManager
@@ -38,7 +38,9 @@ def create_room(body: CreateRoomRequest) -> JoinRoomResponse:
     """Creates a room and returns its room code."""
     room_code = gm.create_room(body.room_type)
     player_id = gm.join_room(room_code)
-    return JoinRoomResponse(room_type=body.room_type, room_code=room_code,
+    room_type = gm.get_room(room_code).get_type()
+
+    return JoinRoomResponse(room_type=room_type, room_code=room_code,
                               player_id=player_id)
 
 @app.post(
@@ -68,7 +70,11 @@ async def ready(body: ReadyRequest) -> ReadyResponse:
     responses={409: {"model": ErrorResponse, "description": "Error getting sentence"}}
 )
 def sentence(body: SentenceRequest) -> SentenceResponse:
-    sentence = gm.get_room(body.room_code).get_sentence()
+    room = gm.get_room(body.room_code)
+    if not isinstance(room, PvpRoom):
+        raise GameError("Only a PvP room can be queried for a sentence")
+
+    sentence = room.get_sentence()
     return SentenceResponse(sentence=sentence.as_ascii())
 
 @app.post(
@@ -77,7 +83,6 @@ def sentence(body: SentenceRequest) -> SentenceResponse:
     responses={409: {"model": ErrorResponse, "description": "Error sending keystroke"}}
 )
 async def keystroke(body: KeystrokeRequest) -> KeystrokeResponse:
-    # get player's next correct key
     room = gm.get_room(body.room_code)
     if room.room_state != RoomState.PLAYING:
         raise RoomError("Room is not playing")
@@ -105,8 +110,8 @@ async def websocket_endpoint(websocket: WebSocket, room_code: str, player_id: st
 
     await room.connections.connect(websocket, player_uuid)
     try:
+        await room.on_player_connected(player_uuid)
         while True:
             data = await websocket.receive_text()
-            # TODO: handle message
     except WebSocketDisconnect:
         room.connections.disconnect(player_uuid)
